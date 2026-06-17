@@ -1,0 +1,362 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f8fafc;
+    color: #182233;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', 'Inter', sans-serif;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  img {
+    display: block;
+  }
+
+  /* Custom Premium Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+}
+
+@layer components {
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-lani-navy focus:shadow-soft;
+  }
+
+  .section {
+    @apply mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest text-lani-green ring-1 ring-lani-green/20 bg-lani-green/5;
+  }
+
+  /* Premium Buttons */
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold transition-all duration-300 transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-lani-blue focus:ring-offset-2;
+  }
+
+  .btn-primary {
+    @apply text-white shadow-sm bg-gradient-to-r from-lani-green to-lani-emerald hover:from-lani-emerald hover:to-lani-green hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .btn-secondary {
+    @apply border border-slate-200 bg-white text-lani-navy shadow-sm hover:bg-slate-50 hover:border-slate-300 hover:-translate-y-0.5;
+  }
+
+  .btn-ghost {
+    @apply bg-white text-lani-green ring-1 ring-lani-green/20 hover:bg-lani-mist hover:-translate-y-0.5;
+  }
+
+  .icon-button {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:scale-105 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-lani-blue focus:ring-offset-2;
+  }
+
+  /* Hero Section Elements */
+  .hero-photo {
+    @apply relative overflow-hidden bg-lani-navy;
+    background-image: linear-gradient(135deg, rgba(15, 36, 66, 0.95), rgba(8, 116, 67, 0.85)), url("https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1800&q=85");
+    background-position: center;
+    background-size: cover;
+  }
+
+  .hero-overlay {
+    @apply relative z-10 w-full h-full;
+  }
+
+  .hero-panel {
+    @apply flex flex-col justify-between gap-8 rounded-xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-md transition-all duration-300 hover:border-white/20;
+  }
+
+  .page-hero {
+    @apply mx-auto grid max-w-7xl items-center gap-8 px-4 py-16 sm:px-6 lg:grid-cols-[0.96fr_1.04fr] lg:px-8 lg:py-24;
+  }
+
+  .page-hero h1 {
+    @apply mt-4 text-4xl font-bold leading-tight text-lani-navy sm:text-5xl lg:text-6xl;
+  }
+
+  .page-hero p {
+    @apply mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg;
+  }
+
+  .page-hero-image {
+    @apply h-72 w-full rounded-xl object-cover shadow-soft transition-transform duration-500 hover:scale-[1.01] sm:h-96;
+  }
+
+  .detail-hero {
+    @apply relative overflow-hidden;
+  }
+
+  .checkout-panel {
+    @apply rounded-xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-md;
+  }
+
+  .dark-field {
+    @apply grid gap-2 text-sm font-semibold text-slate-200;
+  }
+
+  .dark-field input,
+  .dark-field select {
+    @apply h-11 rounded-lg border border-white/15 bg-white px-3 text-sm text-lani-ink outline-none transition-all duration-200 focus:border-lani-gold focus:ring-2 focus:ring-lani-gold/30;
+  }
+
+  /* Grid Layouts */
+  .course-grid {
+    @apply grid gap-8 md:grid-cols-2 lg:grid-cols-3;
+  }
+
+  /* Premium Cards & Hover effects */
+  .course-card {
+    @apply flex min-h-[34rem] flex-col overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-2 hover:shadow-soft hover:border-lani-green/20;
+  }
+
+  .course-card img {
+    @apply transition-transform duration-500 ease-in-out;
+  }
+
+  .course-card:hover img {
+    @apply scale-105;
+  }
+
+  .theme-card {
+    @apply rounded-xl border border-slate-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-2 hover:shadow-soft hover:border-lani-green/20 hover:bg-gradient-to-b hover:from-white hover:to-lani-mist/30;
+  }
+
+  .content-panel,
+  .form-panel,
+  .full-band,
+  .certificate-card {
+    @apply rounded-xl border border-slate-100 bg-white p-6 shadow-sm;
+  }
+
+  .full-band {
+    @apply border-0 p-8 shadow-soft bg-gradient-to-br from-lani-navy to-slate-900 text-white relative overflow-hidden;
+  }
+
+  .form-panel {
+    @apply grid gap-6 p-8 shadow-soft bg-white border border-slate-100;
+  }
+
+  .certificate-card {
+    @apply min-h-96 p-8 relative overflow-hidden border border-slate-200 shadow-soft bg-white;
+  }
+
+  .panel-title {
+    @apply text-xl font-bold text-lani-navy tracking-tight;
+  }
+
+  .metric-card {
+    @apply rounded-xl border border-slate-100 bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-soft hover:border-lani-blue/20;
+  }
+
+  .metric-card span {
+    @apply mt-3 block text-sm font-semibold text-slate-500 uppercase tracking-wider;
+  }
+
+  .metric-card strong {
+    @apply mt-1 block text-3xl font-bold text-lani-navy;
+  }
+
+  .metric-tile {
+    @apply flex min-h-20 items-center gap-4 rounded-xl border border-slate-100 bg-white p-4 text-sm font-bold text-lani-navy shadow-sm transition-all duration-300 hover:shadow-soft hover:border-lani-green/20 hover:scale-[1.02];
+  }
+
+  .calendar-item {
+    @apply grid min-h-40 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-2 hover:bg-white hover:shadow-soft hover:border-lani-blue/20;
+  }
+
+  .calendar-item strong {
+    @apply text-base font-bold leading-snug text-lani-navy tracking-tight;
+  }
+
+  .calendar-item span:last-child {
+    @apply text-sm text-slate-600;
+  }
+
+  /* Form Fields */
+  .filter-field,
+  .form-field {
+    @apply grid gap-2 text-sm font-bold text-lani-navy;
+  }
+
+  .filter-field span {
+    @apply inline-flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500;
+  }
+
+  .filter-field input,
+  .filter-field select,
+  .form-field input,
+  .form-field select,
+  .form-field textarea {
+    @apply min-h-11 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-lani-ink outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-lani-blue focus:ring-2 focus:ring-lani-blue/10;
+  }
+
+  .form-field input[type="file"] {
+    @apply cursor-pointer p-2 text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-lani-mist file:px-4 file:py-2.5 file:text-sm file:font-bold file:text-lani-green file:transition-all hover:file:bg-lani-green hover:file:text-white;
+  }
+
+  .module-row,
+  .programme-row {
+    @apply flex gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4 transition-all duration-200 hover:bg-white hover:shadow-sm hover:border-slate-200;
+  }
+
+  .module-index {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-lani-navy text-sm font-bold text-white;
+  }
+
+  .material-row,
+  .transaction-row,
+  .certificate-row {
+    @apply flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition-all duration-200 hover:bg-white hover:shadow-sm;
+  }
+
+  .transaction-row div,
+  .certificate-row div {
+    @apply grid gap-1;
+  }
+
+  .transaction-row strong,
+  .certificate-row strong {
+    @apply text-lani-navy;
+  }
+
+  .transaction-row span,
+  .certificate-row span {
+    @apply text-xs font-medium text-slate-500;
+  }
+
+  .summary-row {
+    @apply rounded-xl border border-slate-100 bg-slate-50 p-5;
+  }
+
+  .summary-row dt {
+    @apply text-xs font-bold uppercase tracking-wider text-slate-500;
+  }
+
+  .summary-row dd {
+    @apply mt-1 text-sm font-bold text-lani-navy;
+  }
+
+  .learner-course {
+    @apply grid gap-6 rounded-xl border border-slate-100 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-soft md:grid-cols-[16rem_1fr];
+  }
+
+  .learner-course img {
+    @apply h-56 w-full rounded-lg object-cover transition-transform duration-500 hover:scale-[1.01] md:h-full;
+  }
+
+  .progress-bar {
+    @apply h-3.5 overflow-hidden rounded-full bg-slate-200;
+  }
+
+  .progress-bar span {
+    @apply block h-full rounded-full bg-gradient-to-r from-lani-green to-lani-emerald transition-all duration-500;
+  }
+
+  .table-shell {
+    @apply overflow-x-auto rounded-xl border border-slate-100 shadow-sm bg-white;
+  }
+
+  .table-shell table {
+    @apply min-w-full divide-y divide-slate-100 text-left text-sm;
+  }
+
+  .table-shell th {
+    @apply bg-slate-50/70 px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-slate-500;
+  }
+
+  .table-shell td {
+    @apply px-4 py-4 align-top text-slate-600 border-b border-slate-50;
+  }
+
+  .table-shell tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .table-shell td strong {
+    @apply block text-lani-navy font-semibold;
+  }
+
+  .table-shell td span {
+    @apply mt-1 block text-xs text-slate-400;
+  }
+
+  .table-shell select {
+    @apply min-h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-lani-navy outline-none transition-all focus:border-lani-blue focus:ring-2 focus:ring-lani-blue/10;
+  }
+
+  .status-dot {
+    @apply mr-2 inline-block h-2.5 w-2.5 rounded-full ring-2 ring-white shadow-sm;
+  }
+
+  .footer-link {
+    @apply text-left text-slate-600 transition-colors duration-200 hover:text-lani-green font-medium;
+  }
+
+  /* Custom glow effect */
+  .glow-box {
+    position: relative;
+  }
+  .glow-box::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: linear-gradient(135deg, rgba(8,116,67,0.3), rgba(11,102,195,0.3));
+    z-index: -1;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .glow-box:hover::after {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 420px) {
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    width: 100%;
+  }
+
+  .course-card {
+    min-height: auto;
+  }
+}
