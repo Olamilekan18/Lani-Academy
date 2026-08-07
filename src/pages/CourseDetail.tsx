@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { Course } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
+import { supabase } from "../lib/supabase";
 
 interface CourseDetailProps {
   course: Course;
@@ -23,6 +24,16 @@ interface CourseDetailProps {
 export default function CourseDetail({ course, onEnrol, onBack }: CourseDetailProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "curriculum" | "objectives" | "audience">("overview");
   const [expandedModule, setExpandedModule] = useState<number | null>(0);
+  const [facProfile, setFacProfile] = useState<any>(null);
+
+  React.useEffect(() => {
+    if (course.facilitator && supabase) {
+      supabase.from("profiles").select("*").eq("full_name", course.facilitator).single()
+        .then(({ data }) => {
+          if (data) setFacProfile(data);
+        });
+    }
+  }, [course.facilitator]);
 
   const seatsLeft = Math.max(0, course.seats - course.enrolled);
 
@@ -109,7 +120,14 @@ export default function CourseDetail({ course, onEnrol, onBack }: CourseDetailPr
                     Facilitator Biography
                   </h3>
                   <p className="text-xs text-slate-500 italic">
-                    Delivered by <strong>{course.facilitator}</strong>, a senior director and accredited trainer at LANI Academy with over 15 years of industry experience.
+                    {facProfile?.bio ? (
+                      <>
+                        <span className="block font-semibold text-lani-navy mb-1">{facProfile.qualifications}</span>
+                        {facProfile.bio}
+                      </>
+                    ) : (
+                      <>Delivered by <strong>{course.facilitator}</strong>, a senior director and accredited trainer at LANI Academy with over 15 years of industry experience.</>
+                    )}
                   </p>
                 </div>
               </div>

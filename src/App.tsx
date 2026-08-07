@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
+import { useAuth } from "./contexts/AuthContext";
+import toast, { Toaster } from "react-hot-toast";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
@@ -11,6 +14,11 @@ import LearnerDashboard from "./pages/LearnerDashboard";
 import FacilitatorDashboard from "./pages/FacilitatorDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import Verify from "./pages/Verify";
+import SignUp from "./pages/SignUp";
+import About from "./pages/About";
+import Certification from "./pages/Certification";
+import Resources from "./pages/Resources";
+import Contact from "./pages/Contact";
 
 import CheckoutModal from "./components/CheckoutModal";
 import CoursePlayer from "./components/CoursePlayer";
@@ -18,16 +26,7 @@ import CertificateModal from "./components/CertificateModal";
 
 import { supabase } from "./lib/supabase";
 import { courses as defaultCourses } from "./data/catalog";
-import {
-  mockQuizzes,
-  mockQuizAttempts,
-  mockAssignments,
-  mockSubmissions,
-  mockAnnouncements,
-  mockCalendarEvents,
-  mockNotifications,
-  mockFacilitatorAssignments
-} from "./data/mockLmsData";
+
 import {
   dbGetCourses,
   dbGetEnrollments,
@@ -44,7 +43,21 @@ import {
   dbUpdateApplicationStatus,
   dbSaveAsset,
   dbSaveLead,
-  dbSaveApplication
+  dbSaveApplication,
+  dbSaveCourse,
+  dbGetQuizzes,
+  dbGetQuizAttempts,
+  dbGetAssignments,
+  dbGetAssignmentSubmissions,
+  dbGetAnnouncements,
+  dbGetCalendarEvents,
+  dbGetNotifications,
+  dbGetFacilitatorAssignments,
+  dbGetFacilitators,
+  dbSaveAnnouncement,
+  dbSaveAssignmentSubmission,
+  dbSaveQuizAttempt,
+  dbSaveFacilitatorAssignment
 } from "./lib/db";
 import type {
   View,
@@ -66,8 +79,9 @@ import type {
 } from "./lib/types";
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<View>("home");
-  const [demoRole, setDemoRole] = useState<"visitor" | "learner" | "facilitator" | "admin">("visitor");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, profile, loading: authLoading } = useAuth();
 
   // Data lists loaded from database
   const [courses, setCourses] = useState<Course[]>([]);
@@ -88,6 +102,7 @@ export default function App() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [facilitatorAssignments, setFacilitatorAssignments] = useState<FacilitatorAssignment[]>([]);
+  const [facilitators, setFacilitators] = useState<{fullName: string, email: string}[]>([]);
 
   // Detailed view states
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
@@ -144,15 +159,38 @@ export default function App() {
       const dbAssets = await dbGetAssets();
       setAssets(dbAssets);
 
-      // Load mock data for extended LMS features
-      setQuizzes(mockQuizzes);
-      setQuizAttempts(mockQuizAttempts);
-      setCourseAssignments(mockAssignments);
-      setSubmissions(mockSubmissions);
-      setAnnouncements(mockAnnouncements);
-      setCalendarEvents(mockCalendarEvents);
-      setNotifications(mockNotifications);
-      setFacilitatorAssignments(mockFacilitatorAssignments);
+      // Load extended LMS features from Supabase
+      const [
+        dbQuizzes,
+        dbQuizAttempts,
+        dbAssignments,
+        dbSubmissions,
+        dbAnnouncements,
+        dbCalendarEvents,
+        dbNotifications,
+        dbFacilitatorAssignments,
+        dbFacilitators
+      ] = await Promise.all([
+        dbGetQuizzes(),
+        dbGetQuizAttempts(),
+        dbGetAssignments(),
+        dbGetAssignmentSubmissions(),
+        dbGetAnnouncements(),
+        dbGetCalendarEvents(),
+        dbGetNotifications(),
+        dbGetFacilitatorAssignments(),
+        dbGetFacilitators()
+      ]);
+
+      setQuizzes(dbQuizzes);
+      setQuizAttempts(dbQuizAttempts);
+      setCourseAssignments(dbAssignments);
+      setSubmissions(dbSubmissions);
+      setAnnouncements(dbAnnouncements);
+      setCalendarEvents(dbCalendarEvents);
+      setNotifications(dbNotifications);
+      setFacilitatorAssignments(dbFacilitatorAssignments);
+      setFacilitators(dbFacilitators);
 
       setOfflineMode(false);
     } catch (err: any) {
@@ -167,18 +205,20 @@ export default function App() {
     loadDatabase();
   }, []);
 
-  // Sync role changes
-  const handleDemoRoleChange = (role: "visitor" | "learner" | "facilitator" | "admin") => {
-    setDemoRole(role);
-    if (role === "visitor") {
-      setCurrentView("home");
-    } else if (role === "learner") {
-      setCurrentView("learner");
-    } else if (role === "facilitator") {
-      setCurrentView("facilitator");
-    } else if (role === "admin") {
-      setCurrentView("admin");
-    }
+  // Helper for components still using onNavigate
+  const navigateToView = (view: View) => {
+    if (view === "home") navigate("/");
+    else if (view === "courses") navigate("/courses");
+    else if (view === "corporate") navigate("/corporate");
+    else if (view === "applications") navigate("/applications");
+    else if (view === "learner") navigate("/learn");
+    else if (view === "facilitator") navigate("/facilitator");
+    else if (view === "admin") navigate("/admin");
+    else if (view === "verify") navigate("/verify");
+    else if (view === "about") navigate("/about");
+    else if (view === "certification") navigate("/certification");
+    else if (view === "resources") navigate("/resources");
+    else if (view === "contact") navigate("/contact");
   };
 
   // Wishlist toggle
@@ -191,21 +231,26 @@ export default function App() {
   // Open course page
   const handleOpenCourse = (course: Course) => {
     setSelectedCourse(course);
-    setCurrentView("courses"); // Show detail instead of list
+    navigate("/courses");
   };
 
   // Handle Checkout success
-  const handlePaymentComplete = async (gateway: "Paystack" | "Flutterwave" | "Bank Transfer") => {
+  const handlePaymentComplete = async (
+    gateway: "Paystack" | "Flutterwave" | "Bank Transfer",
+    reference?: string
+  ) => {
     if (!selectedCourse) return;
 
     const enrollmentId = "enr-" + Math.random().toString(36).substring(2, 8);
     const transactionId = "txn-" + Math.random().toString(36).substring(2, 8);
+    const learnerEmail = profile?.email || user?.email || "learner@lani.academy";
+    const learnerName = profile?.full_name || "Learner";
 
     const enrollment: Enrollment = {
       id: enrollmentId,
       courseId: selectedCourse.id,
-      learnerEmail: "learner@lani.academy",
-      learnerName: "Learner (Demo)",
+      learnerEmail,
+      learnerName,
       enrolledAt: new Date().toISOString().split("T")[0],
       progress: 0,
       completedLessons: [],
@@ -215,8 +260,8 @@ export default function App() {
     const transaction: Transaction = {
       id: transactionId,
       courseId: selectedCourse.id,
-      learnerEmail: "learner@lani.academy",
-      receiptNumber: "LANI-REC-" + Math.floor(100000 + Math.random() * 900000),
+      learnerEmail,
+      receiptNumber: reference || "LANI-REC-" + Math.floor(100000 + Math.random() * 900000),
       gateway,
       amount: selectedCourse.price,
       status: gateway === "Bank Transfer" ? "Pending" : "Successful",
@@ -317,18 +362,54 @@ export default function App() {
     }
   };
 
+  // Course addition
+  const handleAddCourse = async (courseData: Partial<Course>) => {
+    try {
+      await dbSaveCourse(courseData);
+      await loadDatabase();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAssignFacilitator = async (assignment: FacilitatorAssignment) => {
+    try {
+      await dbSaveFacilitatorAssignment(assignment);
+      await loadDatabase();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Action stubs for new components
-  const handlePostAnnouncement = (a: Omit<Announcement, "id"|"createdAt">) => {
-    const newAnn: Announcement = { ...a, id: "ann-" + Date.now(), createdAt: new Date().toISOString() };
-    setAnnouncements([newAnn, ...announcements]);
+  const handlePostAnnouncement = async (a: Omit<Announcement, "id"|"createdAt">) => {
+    const newAnn: Announcement = { ...a, id: "ann-" + Date.now().toString(), createdAt: new Date().toISOString() };
+    await dbSaveAnnouncement(newAnn);
+    await loadDatabase();
   };
 
-  const handleGradeSubmission = (subId: string, score: number, feedback: string) => {
-    setSubmissions(subs => subs.map(s => s.id === subId ? { ...s, score, feedback, status: "Graded" } : s));
+  const handleGradeSubmission = async (subId: string, score: number, feedback: string) => {
+    const sub = submissions.find(s => s.id === subId);
+    if (sub) {
+      await dbSaveAssignmentSubmission({ ...sub, score, feedback, status: "Graded" });
+      await loadDatabase();
+    }
   };
 
-  const handleTakeQuiz = (q: Quiz) => {
-    alert(`Mock Quiz Launched: ${q.title}`);
+  const handleTakeQuiz = async (q: Quiz) => {
+    const attempt: QuizAttempt = {
+      id: "qatt-" + Date.now().toString(),
+      quizId: q.id,
+      learnerEmail: "learner@lani.academy",
+      learnerName: "Learner (Demo)",
+      answers: [],
+      score: 100, // mock taking
+      passed: true,
+      submittedAt: new Date().toISOString()
+    };
+    await dbSaveQuizAttempt(attempt);
+    await loadDatabase();
+    toast.success(`Mock Quiz Completed and Saved: ${q.title}`);
   };
 
   const handleUpdatePaymentStatus = async (id: string, status: Transaction["status"]) => {
@@ -339,12 +420,29 @@ export default function App() {
   // Verification redirects
   const handleVerifyLink = (certId: string) => {
     setActiveVerifyId(certId);
-    setCurrentView("verify");
+    navigate("/verify");
   };
 
-  // Render view router helper
-  const renderViewContent = () => {
-    if (loading) {
+  // Helper to map current location pathname to the old "currentView" string for Navbar active state
+  const getCurrentViewString = (): View => {
+    const path = location.pathname;
+    if (path === "/") return "home";
+    if (path.startsWith("/courses")) return "courses";
+    if (path.startsWith("/corporate")) return "corporate";
+    if (path.startsWith("/applications")) return "applications";
+    if (path.startsWith("/learn")) return "learner";
+    if (path.startsWith("/facilitator")) return "facilitator";
+    if (path.startsWith("/admin")) return "admin";
+    if (path.startsWith("/verify")) return "verify";
+    if (path.startsWith("/about")) return "about";
+    if (path.startsWith("/certification")) return "certification";
+    if (path.startsWith("/resources")) return "resources";
+    if (path.startsWith("/contact")) return "contact";
+    return "home";
+  };
+
+  const renderRoutes = () => {
+    if (loading || authLoading) {
       return (
         <div className="section min-h-[45rem] flex items-center justify-center">
           <div className="text-center space-y-4">
@@ -403,9 +501,9 @@ export default function App() {
       );
     }
 
-    switch (currentView) {
-      case "home":
-        return (
+    return (
+      <Routes>
+        <Route path="/" element={
           <Home
             courses={courses}
             thematicAreas={courses.reduce((acc: any[], curr) => {
@@ -414,147 +512,158 @@ export default function App() {
               }
               return acc;
             }, [])}
-            onNavigate={setCurrentView}
+            onNavigate={navigateToView}
             onOpenCourse={handleOpenCourse}
             onAddLead={handleAddLead}
           />
-        );
-      case "courses":
-        if (selectedCourse) {
-          return (
+        } />
+        
+        <Route path="/courses" element={
+          selectedCourse ? (
             <CourseDetail
               course={selectedCourse}
-              onBack={() => setSelectedCourse(null)}
+              onBack={() => { setSelectedCourse(null); navigate("/courses"); }}
               onEnrol={() => {
-                if (demoRole === "visitor") {
-                  alert("Please sign in as a Learner (via Demo Switcher) to enable payments and progression.");
-                  setDemoRole("learner");
+                if (!user || profile?.role !== "learner") {
+                  toast.error("Please sign in as a Learner to enable payments and progression.");
                 }
                 setShowCheckout(true);
               }}
             />
-          );
-        }
-        return (
-          <Courses
-            courses={courses}
-            wishlist={wishlist}
-            onToggleWishlist={handleToggleWishlist}
-            onOpenCourse={handleOpenCourse}
-            thematicAreas={Array.from(new Set(courses.map((c) => c.thematicArea)))}
-          />
-        );
-      case "corporate":
-        return <Corporate thematicAreas={Array.from(new Set(courses.map((c) => c.thematicArea)))} />;
-      case "applications":
-        return <Applications />;
-      case "learner":
-        if (demoRole !== "learner") {
-          return (
-            <Login
-              onNavigate={setCurrentView}
-              onForceDemoRole={handleDemoRoleChange}
-              onSuccess={() => handleDemoRoleChange("learner")}
+          ) : (
+            <Courses
+              courses={courses}
+              wishlist={wishlist}
+              onToggleWishlist={handleToggleWishlist}
+              onOpenCourse={handleOpenCourse}
+              thematicAreas={Array.from(new Set(courses.map((c) => c.thematicArea)))}
             />
-          );
-        }
-        return (
-          <LearnerDashboard
-            enrollments={enrollments}
-            courses={courses}
-            certificates={certificates}
-            transactions={transactions}
-            quizzes={quizzes}
-            quizAttempts={quizAttempts}
-            assignments={courseAssignments}
-            submissions={submissions}
-            announcements={announcements}
-            calendarEvents={calendarEvents}
-            notifications={notifications}
-            onOpenPlayer={(c, e) => setActivePlayer({ course: c, enrollment: e })}
-            onOpenCertificate={setActiveCertificate}
-            onTakeQuiz={handleTakeQuiz}
-          />
-        );
-      case "facilitator":
-        if (demoRole !== "facilitator") {
-          return (
+          )
+        } />
+
+        <Route path="/corporate" element={<Corporate thematicAreas={Array.from(new Set(courses.map((c) => c.thematicArea)))} />} />
+        
+        <Route path="/applications" element={<Applications />} />
+
+        <Route path="/signup" element={<SignUp />} />
+
+        <Route path="/about" element={<About onNavigate={navigateToView} />} />
+        <Route path="/certification" element={<Certification onNavigate={navigateToView} />} />
+        <Route path="/resources" element={<Resources onNavigate={navigateToView} />} />
+        <Route path="/contact" element={<Contact />} />
+
+        <Route path="/learn" element={
+          !user ? (
             <Login
-              onNavigate={setCurrentView}
-              onForceDemoRole={handleDemoRoleChange as any}
-              onSuccess={() => handleDemoRoleChange("facilitator")}
+              portalRole="learner"
+              onNavigate={navigateToView}
+              onSuccess={() => {}}
             />
-          );
-        }
-        return (
-          <FacilitatorDashboard
-            courses={courses}
-            enrollments={enrollments}
-            assignments={facilitatorAssignments}
-            courseAssignments={courseAssignments}
-            submissions={submissions}
-            announcements={announcements}
-            calendarEvents={calendarEvents}
-            quizAttempts={quizAttempts}
-            onPostAnnouncement={handlePostAnnouncement}
-            onGradeSubmission={handleGradeSubmission}
-          />
-        );
-      case "admin":
-        if (demoRole !== "admin") {
-          return (
+          ) : profile?.role === "learner" ? (
+            <LearnerDashboard
+              enrollments={enrollments}
+              courses={courses}
+              certificates={certificates}
+              transactions={transactions}
+              quizzes={quizzes}
+              quizAttempts={quizAttempts}
+              assignments={courseAssignments}
+              submissions={submissions}
+              announcements={announcements}
+              calendarEvents={calendarEvents}
+              notifications={notifications}
+              onOpenPlayer={(c, e) => setActivePlayer({ course: c, enrollment: e })}
+              onOpenCertificate={setActiveCertificate}
+              onTakeQuiz={handleTakeQuiz}
+            />
+          ) : (
+            <Navigate to={profile?.role === "admin" || profile?.role === "super_admin" ? "/admin" : "/facilitator"} replace />
+          )
+        } />
+
+        <Route path="/facilitator" element={
+          !user ? (
             <Login
-              onNavigate={setCurrentView}
-              onForceDemoRole={handleDemoRoleChange}
-              onSuccess={() => handleDemoRoleChange("admin")}
+              portalRole="facilitator"
+              onNavigate={navigateToView}
+              onSuccess={() => {}}
             />
-          );
-        }
-        return (
-          <AdminDashboard
-            courses={courses}
-            enrollments={enrollments}
-            transactions={transactions}
-            certificates={certificates}
-            leads={leads}
-            applications={applications}
-            assets={assets}
-            onUpdateLeadStage={handleUpdateLeadStage}
-            onUpdateAppStatus={handleUpdateAppStatus}
-            onAddAsset={handleAddAsset}
-            onRefreshData={loadDatabase}
-            onUpdatePaymentStatus={handleUpdatePaymentStatus}
-          />
-        );
-      case "verify":
-        return (
+          ) : profile?.role === "facilitator" ? (
+            <FacilitatorDashboard
+              courses={courses}
+              enrollments={enrollments}
+              assignments={facilitatorAssignments}
+              courseAssignments={courseAssignments}
+              submissions={submissions}
+              announcements={announcements}
+              calendarEvents={calendarEvents}
+              quizAttempts={quizAttempts}
+              onPostAnnouncement={handlePostAnnouncement}
+              onGradeSubmission={handleGradeSubmission}
+            />
+          ) : (
+            <Navigate to={profile?.role === "admin" || profile?.role === "super_admin" ? "/admin" : "/learn"} replace />
+          )
+        } />
+
+        <Route path="/admin" element={
+          !user ? (
+            <Login
+              portalRole="admin"
+              onNavigate={navigateToView}
+              onSuccess={() => {}}
+            />
+          ) : (profile?.role === "admin" || profile?.role === "super_admin") ? (
+            <AdminDashboard
+              courses={courses}
+              enrollments={enrollments}
+              transactions={transactions}
+              certificates={certificates}
+              leads={leads}
+              applications={applications}
+              assets={assets}
+              facilitators={facilitators}
+              onUpdateLeadStage={handleUpdateLeadStage}
+              onUpdateAppStatus={handleUpdateAppStatus}
+              onAddAsset={handleAddAsset}
+              onAddCourse={handleAddCourse}
+              onAssignFacilitator={handleAssignFacilitator}
+              onRefreshData={loadDatabase}
+              onUpdatePaymentStatus={handleUpdatePaymentStatus}
+            />
+          ) : (
+            <Navigate to={profile?.role === "facilitator" ? "/facilitator" : "/learn"} replace />
+          )
+        } />
+
+        <Route path="/verify" element={
           <Verify
             certificates={certificates}
             initialQuery={activeVerifyId}
             onOpenCertificate={setActiveCertificate}
           />
-        );
-      default:
-        return (
+        } />
+
+        <Route path="*" element={
           <div className="section text-center py-20">
             <h2 className="text-xl font-bold">404 - Workspace View Not Found</h2>
           </div>
-        );
-    }
+        } />
+      </Routes>
+    );
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
+      <Toaster position="top-right" />
       {/* Sticky header */}
       <Navbar
-        currentView={currentView}
+        currentView={getCurrentViewString()}
         onNavigate={(view) => {
           setSelectedCourse(null);
           setActiveVerifyId("");
-          setCurrentView(view);
+          navigateToView(view);
         }}
-        demoRole={demoRole}
-        onDemoRoleChange={handleDemoRoleChange}
       />
 
       {/* Main viewport */}
@@ -571,7 +680,7 @@ export default function App() {
             </button>
           </div>
         )}
-        {renderViewContent()}
+        {renderRoutes()}
       </main>
 
 
@@ -580,7 +689,7 @@ export default function App() {
         onNavigate={(view) => {
           setSelectedCourse(null);
           setActiveVerifyId("");
-          setCurrentView(view);
+          navigateToView(view);
         }}
       />
 
@@ -588,8 +697,8 @@ export default function App() {
       {showCheckout && selectedCourse && (
         <CheckoutModal
           course={selectedCourse}
-          learnerName={demoRole === "learner" ? "Learner (Demo)" : ""}
-          learnerEmail={demoRole === "learner" ? "learner@lani.academy" : ""}
+          learnerName={profile?.full_name || ""}
+          learnerEmail={profile?.email || user?.email || ""}
           onClose={() => setShowCheckout(false)}
           onPaymentComplete={handlePaymentComplete}
         />

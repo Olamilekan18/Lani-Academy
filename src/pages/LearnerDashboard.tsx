@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { BookOpen, Award, CreditCard, PlayCircle, ShieldCheck, Calendar, ClipboardCheck, User, Bell, ChevronRight, CheckCircle, Clock, FileText, ExternalLink, TrendingUp, AlertCircle } from "lucide-react";
 import type { Course, Enrollment, Certificate, Transaction, Quiz, QuizAttempt, Assignment, AssignmentSubmission, Announcement, CalendarEvent, Notification } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
+import toast from "react-hot-toast";
 
 type Tab = "overview"|"courses"|"schedule"|"assessments"|"certificates"|"transactions"|"profile";
 
@@ -337,7 +338,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
                 <p className="text-xs text-slate-500">learner@lani.academy • Learner</p>
               </div>
             </div>
-            <form className="grid gap-4 sm:grid-cols-2" onSubmit={e => {e.preventDefault(); alert("Profile updated (demo)");}}>
+            <form className="grid gap-4 sm:grid-cols-2" onSubmit={e => {e.preventDefault(); toast.success("Profile updated (demo)");}}>
               <label className="form-field">Full Name<input defaultValue="Adewale Okonkwo"/></label>
               <label className="form-field">Email<input defaultValue="learner@lani.academy" disabled className="!bg-slate-50"/></label>
               <label className="form-field">Phone<input defaultValue="+234 812 345 6789"/></label>

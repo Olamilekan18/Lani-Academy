@@ -347,6 +347,64 @@
   .glow-box:hover::after {
     opacity: 1;
   }
+
+  /* ── Refreshed design system helpers ─────────────────────── */
+  .gradient-text {
+    @apply bg-gradient-to-r from-lani-green to-lani-emerald bg-clip-text text-transparent;
+  }
+
+  .page-header {
+    @apply mx-auto max-w-3xl text-center;
+  }
+
+  .section-title {
+    @apply text-3xl font-bold tracking-tight text-lani-navy sm:text-4xl;
+  }
+
+  .lead {
+    @apply text-base leading-7 text-slate-500;
+  }
+
+  /* Consistent, premium page hero band for interior pages */
+  .hero-band {
+    @apply relative overflow-hidden bg-lani-navy text-white;
+  }
+
+  .hero-band::before {
+    content: "";
+    @apply absolute inset-0 opacity-100;
+    background:
+      radial-gradient(60rem 30rem at 15% -10%, rgba(16, 167, 104, 0.25), transparent 60%),
+      radial-gradient(50rem 30rem at 100% 120%, rgba(11, 102, 195, 0.22), transparent 55%);
+  }
+
+  .hero-band > * {
+    @apply relative z-10;
+  }
+
+  .info-card {
+    @apply rounded-2xl border border-slate-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-soft hover:border-lani-green/20;
+  }
+
+  .feature-icon {
+    @apply flex h-11 w-11 items-center justify-center rounded-xl bg-lani-green/5 text-lani-green ring-1 ring-lani-green/10;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600;
+  }
+
+  .stat-block {
+    @apply rounded-2xl border border-slate-100 bg-white p-6 text-center shadow-sm;
+  }
+
+  .stat-block strong {
+    @apply block text-3xl font-extrabold text-lani-navy;
+  }
+
+  .stat-block span {
+    @apply mt-1 block text-xs font-semibold uppercase tracking-wider text-slate-400;
+  }
 }
 
 @media (max-width: 420px) {

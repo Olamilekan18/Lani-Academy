@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye } from "lucide-react";
+import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset } from "../lib/types";
+import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { seedDatabase } from "../lib/db";
+import toast from "react-hot-toast";
 
 type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms";
 
@@ -15,19 +16,26 @@ interface Props {
   leads: CorporateLead[];
   applications: ProgrammeApplication[];
   assets: CmsAsset[];
+  facilitators: {fullName: string, email: string}[];
   onUpdateLeadStage: (id: string, stage: CorporateLead["stage"]) => Promise<void>;
   onUpdateAppStatus: (id: string, status: ProgrammeApplication["status"]) => Promise<void>;
   onAddAsset: (d: any) => Promise<void>;
+  onAddCourse: (course: Partial<Course>) => Promise<void>;
+  onAssignFacilitator: (assignment: FacilitatorAssignment) => Promise<void>;
   onRefreshData: () => Promise<void>;
   onUpdatePaymentStatus: (id: string, status: Transaction["status"]) => void;
 }
 
 const COLORS = ["#087443","#0b66c3","#c9972b","#d95845","#10a768","#6366f1","#ec4899","#14b8a6"];
 
-export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onRefreshData, onUpdatePaymentStatus }: Props) {
+export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
   const [tab, setTab] = useState<Tab>("overview");
   const [seeding, setSeeding] = useState(false);
   const [addingAsset, setAddingAsset] = useState(false);
+  const [isAddingCourse, setIsAddingCourse] = useState(false);
+  const [addingCourseObj, setAddingCourseObj] = useState(false);
+  const [assigningCourse, setAssigningCourse] = useState<Course | null>(null);
+  const [isAssigning, setIsAssigning] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
   const totalRevenue = transactions.filter(t => t.status==="Successful"||t.status==="Manually Confirmed").reduce((s,t) => s+Number(t.amount), 0);
@@ -49,13 +57,110 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     return acc;
   }, []);
 
-  const handleSeed = async () => { setSeeding(true); const ok = await seedDatabase(); if(ok){alert("Courses seeded!"); await onRefreshData();}else{alert("Seed failed.");} setSeeding(false); };
+  // Revenue by thematic area (BRD REP-004)
+  const revenueByArea = courses.reduce((acc:Record<string,number>, c) => {
+    const rev = transactions
+      .filter(t => t.courseId===c.id && (t.status==="Successful"||t.status==="Manually Confirmed"))
+      .reduce((s,t) => s+Number(t.amount), 0);
+    if (rev>0) acc[c.thematicArea] = (acc[c.thematicArea]||0) + rev;
+    return acc;
+  }, {});
+  const revenueAreaList = Object.entries(revenueByArea).sort((a,b) => b[1]-a[1]);
+  const maxAreaRevenue = revenueAreaList.length ? revenueAreaList[0][1] : 0;
+
+  // Lead conversion rate (BRD REP-008)
+  const wonLeads = leads.filter(l => l.stage==="Won").length;
+  const conversionRate = leads.length ? Math.round((wonLeads/leads.length)*100) : 0;
+
+  // Real CSV export (BRD REP-010)
+  const exportCsv = (filename: string, rows: Record<string, any>[]) => {
+    if (!rows.length) { toast.error("Nothing to export yet."); return; }
+    const headers = Object.keys(rows[0]);
+    const esc = (v:any) => `"${String(v ?? "").replace(/"/g,'""')}"`;
+    const csv = [headers.join(","), ...rows.map(r => headers.map(h => esc(r[h])).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Export downloaded.");
+  };
+
+  const handleSeed = async () => { setSeeding(true); const ok = await seedDatabase(); if(ok){toast.success("Courses seeded!"); await onRefreshData();}else{toast.error("Seed failed.");} setSeeding(false); };
 
   const handleSubmitAsset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault(); setAddingAsset(true);
     const fd = new FormData(e.currentTarget);
     try { await onAddAsset({name:fd.get("assetName"),type:fd.get("assetType"),placement:fd.get("placement"),owner:fd.get("owner")||"Content Manager",status:fd.get("status")||"Draft"}); e.currentTarget.reset(); } catch(err){console.error(err);}
     setAddingAsset(false);
+  };
+
+  const handleAddCourseSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setAddingCourseObj(true);
+    const fd = new FormData(e.currentTarget);
+    const newCourse: Partial<Course> = {
+      id: "course-" + Math.random().toString(36).substring(2, 9),
+      title: fd.get("title") as string,
+      code: fd.get("code") as string,
+      category: fd.get("category") as string,
+      thematicArea: fd.get("thematicArea") as string,
+      type: fd.get("type") as any,
+      level: fd.get("level") as any,
+      price: Number(fd.get("price")),
+      duration: fd.get("duration") as string,
+      status: fd.get("status") as any,
+      startDate: fd.get("startDate") as string,
+      endDate: fd.get("endDate") as string,
+      seats: Number(fd.get("seats")),
+      enrolled: 0,
+      image: (fd.get("image") as string) || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      shortDescription: fd.get("shortDescription") as string,
+      fullDescription: (fd.get("shortDescription") as string) + " (Full description pending)",
+      outcomes: ["Understand core concepts", "Apply knowledge in practical scenarios", "Earn certification"],
+      audience: ["Professionals", "Students"],
+      deliveryModes: ["Online", "Self-paced"] as any[],
+      modules: [],
+      materials: [],
+      assessment: "Final Quiz",
+      featured: false,
+      certification: "Certificate of Completion",
+      facilitator: "TBD"
+    };
+
+    try {
+      await onAddCourse(newCourse);
+      setIsAddingCourse(false);
+    } catch (err) {
+      console.error(err);
+    }
+    setAddingCourseObj(false);
+  };
+
+  const handleAssignSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!assigningCourse) return;
+    setIsAssigning(true);
+    const fd = new FormData(e.currentTarget);
+    const selectedEmail = fd.get("facilitator") as string;
+    const selectedFacilitator = facilitators.find(f => f.email === selectedEmail);
+
+    if (!selectedFacilitator) return;
+
+    const assignment: FacilitatorAssignment = {
+      facilitatorEmail: selectedFacilitator.email,
+      facilitatorName: selectedFacilitator.fullName,
+      courseId: assigningCourse.id,
+      courseTitle: assigningCourse.title,
+      assignedAt: new Date().toISOString()
+    };
+    try {
+      await onAssignFacilitator(assignment);
+      setAssigningCourse(null);
+    } catch(err) {
+      console.error(err);
+    }
+    setIsAssigning(false);
   };
 
   const tabs: {key:Tab;label:string;icon:any;count?:number}[] = [
@@ -166,32 +271,160 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
               </div>
             </div>
           </div>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-sm font-bold text-lani-navy mb-4 uppercase tracking-wider flex items-center gap-1.5"><DollarSign size={16} className="text-lani-green"/>Revenue by Thematic Area</h3>
+              {revenueAreaList.length > 0 ? (
+                <div className="grid gap-3">
+                  {revenueAreaList.map(([area, rev]) => (
+                    <div key={area} className="flex items-center gap-3">
+                      <span className="text-xs font-semibold text-slate-500 w-40 truncate" title={area}>{area}</span>
+                      <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-lani-green rounded-full transition-all" style={{width:`${maxAreaRevenue>0?(rev/maxAreaRevenue)*100:0}%`}}/></div>
+                      <span className="text-xs font-bold text-lani-navy w-24 text-right">{formatMoney(rev)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="py-10 text-center text-xs text-slate-400">No confirmed revenue yet.</div>}
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-sm font-bold text-lani-navy mb-4 uppercase tracking-wider">Commercial KPIs</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Lead Conversion</span>
+                  <strong className="block text-2xl font-extrabold text-lani-navy mt-1">{conversionRate}%</strong>
+                  <span className="text-[10px] text-slate-400">{wonLeads} won / {leads.length} leads</span>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Certificates Issued</span>
+                  <strong className="block text-2xl font-extrabold text-lani-navy mt-1">{certificates.filter(c=>c.status==="Issued").length}</strong>
+                  <span className="text-[10px] text-slate-400">of {certificates.length} total</span>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Avg. Revenue / Learner</span>
+                  <strong className="block text-2xl font-extrabold text-lani-navy mt-1">{formatMoney(enrollments.length? Math.round(totalRevenue/enrollments.length):0)}</strong>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Active Courses</span>
+                  <strong className="block text-2xl font-extrabold text-lani-navy mt-1">{courses.filter(c=>c.status==="Open").length}</strong>
+                  <span className="text-[10px] text-slate-400">of {courses.length} total</span>
+                </div>
+              </div>
+              <button onClick={() => exportCsv("lani-leads.csv", leads.map(l => ({ organisation:l.organisation, contact:l.contactName, email:l.email, sector:l.sector, participants:l.participants, stage:l.stage, date:l.createdAt })))} className="btn-secondary mt-4 w-full justify-center text-xs"><Download size={13}/>Export Leads CSV</button>
+            </div>
+          </div>
         </div>
       )}
 
       {/* COURSES */}
       {tab === "courses" && (
         <div>
-          <div className="mb-4 flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search courses..." className="w-full rounded-lg border border-slate-200 pl-9 pr-4 py-2.5 text-sm"/></div>
-          </div>
-          <div className="table-shell border border-slate-200">
-            <table>
-              <thead><tr><th>Course</th><th>Category</th><th>Price</th><th>Enrolled</th><th>Status</th><th>Type</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">
-                {courses.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase())||c.code.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
-                  <tr key={c.id}>
-                    <td><strong>{c.title}</strong><span>{c.code} • {c.thematicArea}</span></td>
-                    <td className="text-xs">{c.level}</td>
-                    <td className="font-bold text-lani-navy">{formatMoney(c.price)}</td>
-                    <td><span className="text-xs font-bold">{c.enrolled}/{c.seats}</span></td>
-                    <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${c.status==="Open"?"bg-lani-emerald/15 text-lani-green":"bg-slate-100 text-slate-500"}`}>{c.status}</span></td>
-                    <td className="text-xs">{c.type}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {!isAddingCourse ? (
+            <>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="relative flex-1 max-w-sm"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search courses..." className="w-full rounded-lg border border-slate-200 pl-9 pr-4 py-2.5 text-sm"/></div>
+                <button onClick={() => setIsAddingCourse(true)} className="btn-primary min-h-10 text-xs gap-1.5"><Plus size={14}/>Add New Course</button>
+              </div>
+              <div className="table-shell border border-slate-200">
+                <table>
+                  <thead><tr><th>Course</th><th>Category</th><th>Price</th><th>Enrolled</th><th>Status</th><th>Actions</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {courses.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase())||c.code.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
+                      <tr key={c.id}>
+                        <td><strong>{c.title}</strong><span>{c.code} • {c.thematicArea}</span></td>
+                        <td className="text-xs">{c.level}</td>
+                        <td className="font-bold text-lani-navy">{formatMoney(c.price)}</td>
+                        <td><span className="text-xs font-bold">{c.enrolled}/{c.seats}</span></td>
+                        <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${c.status==="Open"?"bg-lani-emerald/15 text-lani-green":"bg-slate-100 text-slate-500"}`}>{c.status}</span></td>
+                        <td>
+                          <button onClick={() => setAssigningCourse(c)} className="btn-secondary px-2 py-1 min-h-0 text-[10px] gap-1 h-6">
+                            <Users size={12}/> Assign Facilitator
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 max-w-3xl">
+              <div className="flex items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+                <button onClick={() => setIsAddingCourse(false)} className="h-8 w-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors"><ArrowLeft size={16}/></button>
+                <div>
+                  <h2 className="text-lg font-bold text-lani-navy">Create New Course</h2>
+                  <p className="text-xs text-slate-500">Fill in the details to publish a new course to the catalog.</p>
+                </div>
+              </div>
+              
+              <form onSubmit={handleAddCourseSubmit} className="grid gap-6">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <label className="form-field">Course Title<input name="title" required placeholder="e.g. Advanced Leadership Skills"/></label>
+                  <label className="form-field">Course Code<input name="code" required placeholder="e.g. LDR-301"/></label>
+                </div>
+                
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <label className="form-field">Category
+                    <select name="category" required>
+                      <option value="Leadership">Leadership</option>
+                      <option value="Technology">Technology</option>
+                      <option value="Business">Business</option>
+                      <option value="Finance">Finance</option>
+                    </select>
+                  </label>
+                  <label className="form-field">Thematic Area<input name="thematicArea" required placeholder="e.g. Executive Management"/></label>
+                  <label className="form-field">Level
+                    <select name="level" required>
+                      <option value="Foundation">Foundation</option>
+                      <option value="Intermediate">Intermediate</option>
+                      <option value="Advanced">Advanced</option>
+                      <option value="Executive">Executive</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <label className="form-field">Course Type
+                    <select name="type" required>
+                      <option value="Open Programme">Open Programme</option>
+                      <option value="Certification Prep">Certification Prep</option>
+                      <option value="Bootcamp">Bootcamp</option>
+                      <option value="Corporate">Corporate</option>
+                    </select>
+                  </label>
+                  <label className="form-field">Status
+                    <select name="status" required>
+                      <option value="Open">Open</option>
+                      <option value="Coming Soon">Coming Soon</option>
+                      <option value="Sold Out">Sold Out</option>
+                    </select>
+                  </label>
+                  <label className="form-field">Price (NGN)<input name="price" type="number" required placeholder="e.g. 150000" min="0"/></label>
+                </div>
+
+                <div className="grid sm:grid-cols-4 gap-4">
+                  <label className="form-field col-span-2">Duration<input name="duration" required placeholder="e.g. 4 Weeks"/></label>
+                  <label className="form-field">Start Date<input name="startDate" type="date" required/></label>
+                  <label className="form-field">End Date<input name="endDate" type="date" required/></label>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <label className="form-field">Total Seats<input name="seats" type="number" required defaultValue="50" min="1"/></label>
+                  <label className="form-field">Cover Image URL<input name="image" placeholder="https://..."/></label>
+                </div>
+
+                <label className="form-field">Short Description
+                  <textarea name="shortDescription" required rows={2} placeholder="A brief summary of what this course offers..." className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-lani-green focus:outline-none focus:ring-1 focus:ring-lani-green resize-y"></textarea>
+                </label>
+
+                <div className="flex justify-end pt-4 border-t border-slate-100 gap-3">
+                  <button type="button" onClick={() => setIsAddingCourse(false)} className="btn-secondary text-xs">Cancel</button>
+                  <button type="submit" disabled={addingCourseObj} className="btn-primary min-h-10 text-xs px-6 gap-2">
+                    {addingCourseObj ? "Saving..." : <><Save size={14}/> Publish Course</>}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
         </div>
       )}
 
@@ -224,7 +457,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
         <div>
           <div className="mb-4 flex items-center gap-3">
             <span className="text-xs font-bold text-slate-500">Total Revenue: <span className="text-lani-navy text-sm">{formatMoney(totalRevenue)}</span></span>
-            <button className="ml-auto btn-secondary min-h-9 px-3 text-xs gap-1" onClick={() => alert("CSV export (demo)")}><Download size={13}/>Export CSV</button>
+            <button className="ml-auto btn-secondary min-h-9 px-3 text-xs gap-1" onClick={() => exportCsv("lani-transactions.csv", transactions.map(t => ({ receipt:t.receiptNumber, learner:t.learnerEmail, amount:t.amount, gateway:t.gateway, status:t.status, date:t.createdAt })))}><Download size={13}/>Export CSV</button>
           </div>
           <div className="table-shell border border-slate-200">
             <table>
@@ -346,6 +579,36 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                 </tbody>
               </table>
             ) : <div className="py-16 text-center"><FileText className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No Assets</h3></div>}
+          </div>
+        </div>
+      )}
+
+      {/* Assign Facilitator Modal Overlay */}
+      {assigningCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl relative animate-in fade-in zoom-in-95 duration-200">
+            <button onClick={() => setAssigningCourse(null)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"><XCircle size={20}/></button>
+            <h3 className="text-lg font-bold text-lani-navy">Assign Facilitator</h3>
+            <p className="text-xs text-slate-500 mt-1 mb-6">Assigning to <strong>{assigningCourse.title}</strong></p>
+
+            <form onSubmit={handleAssignSubmit} className="grid gap-4">
+              <label className="form-field">
+                Select Facilitator
+                <select name="facilitator" required className="w-full rounded border border-slate-200 px-3 py-2 text-sm mt-1">
+                  <option value="" disabled selected>-- Choose a facilitator --</option>
+                  {facilitators.map(f => (
+                    <option key={f.email} value={f.email}>{f.fullName} ({f.email})</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex justify-end gap-2 mt-2 pt-4 border-t border-slate-100">
+                <button type="button" onClick={() => setAssigningCourse(null)} className="btn-secondary text-xs px-4">Cancel</button>
+                <button type="submit" disabled={isAssigning} className="btn-primary text-xs px-6">
+                  {isAssigning ? "Assigning..." : "Assign"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

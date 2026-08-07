@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
-type UserRole = "learner" | "facilitator" | "admin" | "super_admin";
+type UserRole = "learner" | "facilitator" | "admin" | "super_admin" | "organization";
 
 interface Profile {
   id: string;
@@ -13,6 +13,8 @@ interface Profile {
   job_title: string;
   role: UserRole;
   avatar_url: string | null;
+  bio?: string;
+  qualifications?: string;
 }
 
 interface AuthContextType {
@@ -107,13 +109,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function updateProfile(data: Partial<Profile>) {
-    if (!supabase || !user) return { error: "Not authenticated" };
+    if (!supabase) return { error: "Supabase not configured" };
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    const userId = currentSession?.user?.id || user?.id;
+    if (!userId) return { error: "Not authenticated" };
     const { error } = await supabase
       .from("profiles")
       .update(data)
-      .eq("id", user.id);
+      .eq("id", userId);
     if (!error) {
-      setProfile((prev) => (prev ? { ...prev, ...data } : null));
+      const { data: updatedProfile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+      if (updatedProfile) {
+        setProfile(updatedProfile as Profile);
+      }
     }
     return { error: error?.message ?? null };
   }

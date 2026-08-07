@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
 import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2 } from "lucide-react";
 import type { Course, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt } from "../lib/types";
 import { formatDate } from "../lib/utils";
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function FacilitatorDashboard({ courses, enrollments, assignments, courseAssignments, submissions, announcements, calendarEvents, quizAttempts, onPostAnnouncement, onGradeSubmission }: Props) {
+  const { profile, user } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [gradingId, setGradingId] = useState<string|null>(null);
@@ -61,7 +63,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
     e.preventDefault();
     if (!annTitle || !annBody || !annCourse) return;
     const course = myCourses.find(c => c.id === annCourse);
-    onPostAnnouncement({ courseId: annCourse, courseTitle: course?.title || "", authorName: "Dr. Chinedu Okoro", authorRole: "facilitator", title: annTitle, body: annBody });
+    onPostAnnouncement({ courseId: annCourse, courseTitle: course?.title || "", authorName: profile?.full_name || user?.email || "Facilitator", authorRole: "facilitator", title: annTitle, body: annBody });
     setAnnTitle(""); setAnnBody(""); setAnnCourse("");
   };
 
@@ -72,7 +74,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"/>
         <div className="relative z-10 space-y-2">
           <span className="eyebrow border-white/20 bg-white/5 text-white/90">Facilitator Portal</span>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">Welcome, Dr. Chinedu Okoro</h1>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">Welcome, {profile?.full_name || user?.email || "Facilitator"}</h1>
           <p className="text-xs text-white/70 max-w-md">Manage your assigned courses, track learner progress, grade submissions, and post announcements.</p>
         </div>
       </div>

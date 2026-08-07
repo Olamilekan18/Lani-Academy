@@ -1,5 +1,6 @@
 import React from "react";
 import { BookOpen, MapPin, Mail, Phone, ExternalLink } from "lucide-react";
+import toast from "react-hot-toast";
 import type { View } from "../lib/types";
 
 interface FooterProps {
@@ -37,7 +38,7 @@ export default function Footer({ onNavigate }: FooterProps) {
               <span className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-lani-emerald/20">
                 <span className="h-1.5 w-1.5 rounded-full bg-lani-emerald animate-pulse" />
               </span>
-              <span>Supabase Engine: Connected</span>
+              <span>Nigeria · Ghana · Kenya · Uganda</span>
             </div>
           </div>
 
@@ -45,38 +46,39 @@ export default function Footer({ onNavigate }: FooterProps) {
           <div>
             <h3 className="text-sm font-bold uppercase tracking-wider text-white">Programs & Portals</h3>
             <ul className="mt-6 space-y-4">
-              <li>
-                <button
-                  onClick={() => onNavigate("courses")}
-                  className="footer-link text-slate-400 hover:text-white text-sm"
-                >
-                  Course Marketplace
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => onNavigate("corporate")}
-                  className="footer-link text-slate-400 hover:text-white text-sm"
-                >
-                  Corporate Training B2B
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => onNavigate("applications")}
-                  className="footer-link text-slate-400 hover:text-white text-sm"
-                >
-                  Scholarship Applications
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => onNavigate("verify")}
-                  className="footer-link text-slate-400 hover:text-white text-sm"
-                >
-                  Certificate Verification
-                </button>
-              </li>
+              {([
+                { label: "Course Marketplace", view: "courses" },
+                { label: "Certification", view: "certification" },
+                { label: "Corporate Training B2B", view: "corporate" },
+                { label: "Scholarship Applications", view: "applications" },
+                { label: "Certificate Verification", view: "verify" },
+              ] as { label: string; view: View }[]).map((l) => (
+                <li key={l.view}>
+                  <button
+                    onClick={() => onNavigate(l.view)}
+                    className="footer-link text-slate-400 hover:text-white text-sm"
+                  >
+                    {l.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <h3 className="mt-8 text-sm font-bold uppercase tracking-wider text-white">Company</h3>
+            <ul className="mt-6 space-y-4">
+              {([
+                { label: "About LANI Academy", view: "about" },
+                { label: "Resources", view: "resources" },
+                { label: "Contact", view: "contact" },
+              ] as { label: string; view: View }[]).map((l) => (
+                <li key={l.view}>
+                  <button
+                    onClick={() => onNavigate(l.view)}
+                    className="footer-link text-slate-400 hover:text-white text-sm"
+                  >
+                    {l.label}
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -120,7 +122,7 @@ export default function Footer({ onNavigate }: FooterProps) {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                alert("Thank you for subscribing to our briefings!");
+                toast.success("Thank you for subscribing to our briefings!");
               }}
               className="mt-6 flex flex-col gap-2 sm:flex-row"
             >

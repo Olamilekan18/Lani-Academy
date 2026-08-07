@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { X, PlayCircle, Download, FileText, CheckCircle2, ChevronRight, Check } from "lucide-react";
 import type { Course, Enrollment } from "../lib/types";
+import toast from "react-hot-toast";
 
 interface CoursePlayerProps {
   course: Course;
@@ -151,7 +152,7 @@ export default function CoursePlayer({
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    alert("Mock file downloaded successfully.");
+                    toast.success("Mock file downloaded successfully.");
                   }}
                   className="flex items-center justify-between rounded-lg bg-slate-900 p-3 text-xs font-semibold text-slate-300 hover:bg-slate-850 hover:text-white transition-all"
                 >
@@ -165,7 +166,7 @@ export default function CoursePlayer({
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
-                    alert("Mock case study downloaded successfully.");
+                    toast.success("Mock case study downloaded successfully.");
                   }}
                   className="flex items-center justify-between rounded-lg bg-slate-900 p-3 text-xs font-semibold text-slate-300 hover:bg-slate-850 hover:text-white transition-all"
                 >

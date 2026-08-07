@@ -1,20 +1,33 @@
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabase";
 import { LogIn, UserPlus, Key, Mail, ShieldAlert, Loader2, Sparkles, BookOpen, Shield } from "lucide-react";
+import { useLocation } from "react-router-dom";
 
 interface LoginProps {
+  portalRole: "learner" | "facilitator" | "admin" | "organization";
   onSuccess: () => void;
   onNavigate: (view: any) => void;
-  onForceDemoRole: (role: "learner" | "facilitator" | "admin") => void;
 }
 
-export default function Login({ onSuccess, onNavigate, onForceDemoRole }: LoginProps) {
-  const { signIn, signUp, resetPassword } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
-  const [isAdminMode, setIsAdminMode] = useState(false);
+export default function Login({ portalRole, onSuccess, onNavigate }: LoginProps) {
+  const { signIn, signUp, resetPassword, updateProfile } = useAuth();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const initialMode = queryParams.get("mode") === "signup" ? "signup" : "signin";
+
+  // Admin accounts are provisioned by a super admin — never self-serve.
+  const allowSelfSignup = portalRole !== "admin";
+  const [mode, setMode] = useState<"signin" | "signup" | "reset">(
+    allowSelfSignup ? initialMode : "signin"
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [bio, setBio] = useState("");
+  const [qualifications, setQualifications] = useState("");
+  const [orgName, setOrgName] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -31,8 +44,6 @@ export default function Login({ onSuccess, onNavigate, onForceDemoRole }: LoginP
         if (err) {
           setError(err);
         } else {
-          // Sync role base on current portal mode
-          onForceDemoRole(isAdminMode ? "admin" : "learner");
           onSuccess();
         }
       } else if (mode === "signup") {
@@ -47,8 +58,21 @@ export default function Login({ onSuccess, onNavigate, onForceDemoRole }: LoginP
         } else {
           // Immediately log the user in
           const { error: signInErr } = await signIn(email, password);
+          
+          // Elevate to the (non-admin) portal role. Admin/super_admin can
+          // never be self-assigned — the DB trigger rejects it regardless.
+          const updatePayload: any = {};
+          if (portalRole !== "admin") updatePayload.role = portalRole;
+          if (portalRole === "facilitator") {
+            updatePayload.bio = bio;
+            updatePayload.qualifications = qualifications;
+          } else if (portalRole === "organization") {
+            updatePayload.organisation = orgName;
+            updatePayload.job_title = jobTitle;
+          }
+          await updateProfile(updatePayload);
+
           // Go straight into the app regardless of email confirmation blocker
-          onForceDemoRole(isAdminMode ? "admin" : "learner");
           onSuccess();
         }
       } else if (mode === "reset") {
@@ -66,10 +90,7 @@ export default function Login({ onSuccess, onNavigate, onForceDemoRole }: LoginP
     }
   };
 
-  const handleQuickDemo = (role: "learner" | "facilitator" | "admin") => {
-    onForceDemoRole(role);
-    onSuccess();
-  };
+
 
   return (
     <div className="section min-h-[45rem] flex items-center justify-center bg-slate-50">
@@ -78,16 +99,18 @@ export default function Login({ onSuccess, onNavigate, onForceDemoRole }: LoginP
         {/* Brand Header */}
         <div className="text-center mb-8 space-y-2">
           <div className={`mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br text-white shadow ${
-            isAdminMode ? "from-lani-blue to-blue-600" : "from-lani-green to-lani-emerald"
+            portalRole === "admin" ? "from-lani-blue to-blue-600" : portalRole === "facilitator" ? "from-lani-gold to-yellow-600" : "from-lani-green to-lani-emerald"
           }`}>
-            {isAdminMode ? <Shield size={22} /> : <BookOpen size={22} />}
+            {portalRole === "admin" ? <Shield size={22} /> : portalRole === "facilitator" ? <Sparkles size={22} /> : <BookOpen size={22} />}
           </div>
           <h2 className="text-xl font-bold text-lani-navy tracking-tight mt-3">
-            {isAdminMode ? "LANI Admin Console" : "LANI Learner Portal"}
+            {portalRole === "admin" ? "LANI Admin Console" : portalRole === "facilitator" ? "LANI Facilitator Portal" : "LANI Learner Portal"}
           </h2>
           <p className="text-xs text-slate-500">
-            {isAdminMode
+            {portalRole === "admin"
               ? "Access administrative CRM metrics, leads capture, and courses management."
+              : portalRole === "facilitator"
+              ? "Access your course assignments, grading, and learner progress."
               : "Access your digital learning workspace and credentials."}
           </p>
         </div>
@@ -108,16 +131,66 @@ export default function Login({ onSuccess, onNavigate, onForceDemoRole }: LoginP
         {/* Form */}
         <form onSubmit={handleSubmit} className="grid gap-4">
           {mode === "signup" && (
-            <label className="form-field">
-              Full Name
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="John Doe"
-              />
-            </label>
+            <>
+              <label className="form-field">
+                Full Name
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="John Doe"
+                />
+              </label>
+              {portalRole === "facilitator" && (
+                <>
+                  <label className="form-field">
+                    Qualifications
+                    <input
+                      type="text"
+                      required
+                      value={qualifications}
+                      onChange={(e) => setQualifications(e.target.value)}
+                      placeholder="e.g. Ph.D. in Computer Science"
+                    />
+                  </label>
+                  <label className="form-field">
+                    Biography
+                    <textarea
+                      required
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      placeholder="A short biography outlining your expertise..."
+                      className="min-h-[80px]"
+                    />
+                  </label>
+                </>
+              )}
+              {portalRole === "organization" && (
+                <>
+                  <label className="form-field">
+                    Organization Name
+                    <input
+                      type="text"
+                      required
+                      value={orgName}
+                      onChange={(e) => setOrgName(e.target.value)}
+                      placeholder="e.g. Acme Corporation"
+                    />
+                  </label>
+                  <label className="form-field">
+                    Job Title / Role in Organization
+                    <input
+                      type="text"
+                      required
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                      placeholder="e.g. HR Manager / L&D Director"
+                    />
+                  </label>
+                </>
+              )}
+            </>
           )}
 
           <label className="form-field">
@@ -148,7 +221,7 @@ export default function Login({ onSuccess, onNavigate, onForceDemoRole }: LoginP
             type="submit"
             disabled={loading}
             className={`btn-primary w-full justify-center mt-2 ${
-              isAdminMode ? "bg-gradient-to-r from-lani-blue to-blue-600" : ""
+              portalRole === "admin" ? "bg-gradient-to-r from-lani-blue to-blue-600" : portalRole === "facilitator" ? "bg-gradient-to-r from-lani-gold to-yellow-600 border-none text-lani-navy" : ""
             }`}
           >
             {loading ? (
@@ -177,9 +250,13 @@ export default function Login({ onSuccess, onNavigate, onForceDemoRole }: LoginP
           <div className="flex w-full justify-between gap-2">
             {mode === "signin" ? (
               <>
-                <button type="button" onClick={() => setMode("signup")} className="hover:text-lani-green">
-                  Create new account
-                </button>
+                {allowSelfSignup ? (
+                  <button type="button" onClick={() => setMode("signup")} className="hover:text-lani-green">
+                    Create new account
+                  </button>
+                ) : (
+                  <span />
+                )}
                 <button type="button" onClick={() => setMode("reset")} className="hover:text-lani-green">
                   Forgot password?
                 </button>
@@ -190,58 +267,12 @@ export default function Login({ onSuccess, onNavigate, onForceDemoRole }: LoginP
               </button>
             )}
           </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setIsAdminMode(!isAdminMode);
-              setMode("signin");
-              setError("");
-              setMessage("");
-            }}
-            className="text-slate-400 hover:text-lani-blue text-[11px] font-bold underline transition-colors mt-2"
-          >
-            {isAdminMode ? "Switch to Student Learner Portal" : "Administrator Portal Access"}
-          </button>
-        </div>
-
-        {/* Quick Demo Shortcuts Banner */}
-        <div className="mt-8 border-t border-slate-200 pt-6 space-y-3">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-lani-gold uppercase tracking-wider">
-            <Sparkles size={13} />
-            <span>Developer Quick Bypass</span>
-          </div>
-          <p className="text-[10px] text-slate-400 leading-4">
-            Bypass email verification and login directly with pre-seeded role:
-          </p>
-          <div className="flex flex-col gap-2">
-            {isAdminMode ? (
-              <button
-                onClick={() => handleQuickDemo("admin")}
-                type="button"
-                className="w-full rounded-lg border border-lani-blue/20 bg-lani-blue/5 py-2 text-center text-xs font-bold text-lani-blue hover:bg-lani-blue/10"
-              >
-                Sign In Admin (Bypass)
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => handleQuickDemo("learner")}
-                  type="button"
-                  className="w-full rounded-lg border border-lani-green/20 bg-lani-green/5 py-2 text-center text-xs font-bold text-lani-green hover:bg-lani-green/10"
-                >
-                  Sign In Learner (Bypass)
-                </button>
-                <button
-                  onClick={() => handleQuickDemo("facilitator")}
-                  type="button"
-                  className="w-full rounded-lg border border-lani-gold/20 bg-lani-gold/5 py-2 text-center text-xs font-bold text-lani-gold hover:bg-lani-gold/10"
-                >
-                  Sign In Facilitator (Bypass)
-                </button>
-              </>
-            )}
-          </div>
+          {!allowSelfSignup && mode === "signin" && (
+            <p className="text-center text-[11px] leading-5 text-slate-400">
+              Admin accounts are provisioned by a LANI super admin. Contact your
+              administrator for access — self-registration is disabled for security.
+            </p>
+          )}
         </div>
 
       </div>

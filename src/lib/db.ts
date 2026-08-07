@@ -8,7 +8,25 @@ import type {
   CorporateLead,
   ProgrammeApplication,
   CmsAsset,
+  Quiz,
+  QuizAttempt,
+  Assignment,
+  AssignmentSubmission,
+  Announcement,
+  CalendarEvent,
+  Notification,
+  FacilitatorAssignment
 } from "./types";
+import {
+  mockQuizzes,
+  mockQuizAttempts,
+  mockAssignments,
+  mockSubmissions,
+  mockAnnouncements,
+  mockCalendarEvents,
+  mockNotifications,
+  mockFacilitatorAssignments
+} from "../data/mockLmsData";
 
 // Helper to convert camelCase string to snake_case
 function camelToSnake(str: string): string {
@@ -91,6 +109,21 @@ export async function seedDatabase(): Promise<boolean> {
     } else {
       console.log("Courses already populated, skipping seed.");
     }
+
+    // Seed LMS Extended Features
+    const { data: exQuizzes } = await supabase.from("quizzes").select("id").limit(1);
+    if (!exQuizzes || exQuizzes.length === 0) {
+      console.log("Seeding LMS features (Quizzes, Assignments, etc.)...");
+      await supabase.from("quizzes").insert(toSnakeCaseKeys(mockQuizzes));
+      await supabase.from("quiz_attempts").insert(toSnakeCaseKeys(mockQuizAttempts));
+      await supabase.from("assignments").insert(toSnakeCaseKeys(mockAssignments));
+      await supabase.from("assignment_submissions").insert(toSnakeCaseKeys(mockSubmissions));
+      await supabase.from("announcements").insert(toSnakeCaseKeys(mockAnnouncements));
+      await supabase.from("calendar_events").insert(toSnakeCaseKeys(mockCalendarEvents));
+      await supabase.from("notifications").insert(toSnakeCaseKeys(mockNotifications));
+      await supabase.from("facilitator_assignments").insert(toSnakeCaseKeys(mockFacilitatorAssignments));
+    }
+
     return true;
   } catch (err) {
     console.error("Database seeding exception:", err);
@@ -290,6 +323,97 @@ export async function dbUpdateEnrollmentProgress(
     console.error("Error updating enrollment progress:", error.message);
     return false;
   }
+  return true;
+}
+
+// ─── NEW LMS ENTITIES ───────────────────────────────────────────────────────
+
+export async function dbGetQuizzes(): Promise<Quiz[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("quizzes").select("*");
+  return toCamelCaseKeys(data || []) as Quiz[];
+}
+
+export async function dbGetQuizAttempts(): Promise<QuizAttempt[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("quiz_attempts").select("*");
+  return toCamelCaseKeys(data || []) as QuizAttempt[];
+}
+
+export async function dbSaveQuizAttempt(attempt: QuizAttempt): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("quiz_attempts").upsert(toSnakeCaseKeys(attempt));
+  if (error) console.error("Error saving quiz attempt:", error.message);
+  return !error;
+}
+
+export async function dbGetAssignments(): Promise<Assignment[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("assignments").select("*");
+  return toCamelCaseKeys(data || []) as Assignment[];
+}
+
+export async function dbGetAssignmentSubmissions(): Promise<AssignmentSubmission[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("assignment_submissions").select("*");
+  return toCamelCaseKeys(data || []) as AssignmentSubmission[];
+}
+
+export async function dbSaveAssignmentSubmission(submission: AssignmentSubmission): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("assignment_submissions").upsert(toSnakeCaseKeys(submission));
+  if (error) console.error("Error saving assignment submission:", error.message);
+  return !error;
+}
+
+export async function dbGetAnnouncements(): Promise<Announcement[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("announcements").select("*").order("created_at", { ascending: false });
+  return toCamelCaseKeys(data || []) as Announcement[];
+}
+
+export async function dbSaveAnnouncement(ann: Announcement): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("announcements").upsert(toSnakeCaseKeys(ann));
+  if (error) console.error("Error saving announcement:", error.message);
+  return !error;
+}
+
+export async function dbGetCalendarEvents(): Promise<CalendarEvent[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("calendar_events").select("*");
+  return toCamelCaseKeys(data || []) as CalendarEvent[];
+}
+
+export async function dbGetNotifications(): Promise<Notification[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("notifications").select("*").order("created_at", { ascending: false });
+  return toCamelCaseKeys(data || []) as Notification[];
+}
+
+export async function dbGetFacilitatorAssignments(): Promise<FacilitatorAssignment[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("facilitator_assignments").select("*");
+  return toCamelCaseKeys(data || []) as FacilitatorAssignment[];
+}
+
+export async function dbGetFacilitators(): Promise<{fullName: string, email: string}[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("profiles").select("full_name, email").eq("role", "facilitator");
+  return toCamelCaseKeys(data || []) as {fullName: string, email: string}[];
+}
+
+export async function dbSaveFacilitatorAssignment(assignment: FacilitatorAssignment): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("facilitator_assignments").upsert(toSnakeCaseKeys(assignment));
+  if (error) {
+    console.error("Error saving facilitator assignment:", error.message);
+    return false;
+  }
+  // Also update the course facilitator field
+  const { error: cErr } = await supabase.from("courses").update({ facilitator: assignment.facilitatorName }).eq("id", assignment.courseId);
+  if (cErr) console.warn("Could not update course facilitator field:", cErr.message);
+  
   return true;
 }
 

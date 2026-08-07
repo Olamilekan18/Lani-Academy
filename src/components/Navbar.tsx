@@ -10,103 +10,58 @@ import {
   X,
   RefreshCw,
   BadgeCheck,
-  GraduationCap
+  GraduationCap,
+  Building2
 } from "lucide-react";
 import type { View } from "../lib/types";
-
-type DemoRole = "visitor" | "learner" | "facilitator" | "admin";
 
 interface NavbarProps {
   currentView: View;
   onNavigate: (view: View) => void;
-  demoRole: DemoRole;
-  onDemoRoleChange: (role: DemoRole) => void;
 }
 
 export default function Navbar({
   currentView,
   onNavigate,
-  demoRole,
-  onDemoRoleChange,
 }: NavbarProps) {
   const { user, profile, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  const effectiveRole =
-    demoRole === "admin"
-      ? "Admin (Demo)"
-      : demoRole === "facilitator"
-      ? "Facilitator (Demo)"
-      : demoRole === "learner"
-      ? "Learner (Demo)"
-      : user
-      ? profile?.role ?? "Learner"
-      : "Guest";
+  const userRole = user ? profile?.role ?? "learner" : "visitor";
+  const effectiveRole = user ? profile?.full_name || profile?.email || "User" : "Guest";
 
   const navItems = [
-    { label: "Home", view: "home" as View },
     { label: "Courses", view: "courses" as View },
+    { label: "Certification", view: "certification" as View },
     { label: "B2B Training", view: "corporate" as View },
     { label: "Scholarships", view: "applications" as View },
-    { label: "Verify Certificate", view: "verify" as View },
+    { label: "Resources", view: "resources" as View },
+    { label: "About", view: "about" as View },
+    { label: "Verify", view: "verify" as View },
   ];
 
-  const roleButtons: { key: DemoRole; label: string }[] = [
-    { key: "visitor", label: "Visitor" },
-    { key: "learner", label: "Learner" },
-    { key: "facilitator", label: "Facilitator" },
-    { key: "admin", label: "Admin" },
-  ];
+  const mobileExtra = [{ label: "Contact", view: "contact" as View }];
 
   const dashboardView: View | null =
-    demoRole === "admin" ? "admin" : demoRole === "facilitator" ? "facilitator" : demoRole === "learner" ? "learner" : null;
+    userRole === "admin" ? "admin" : userRole === "facilitator" ? "facilitator" : userRole === "organization" ? "organization" : userRole === "learner" ? "learner" : null;
 
   const dashboardLabel =
-    demoRole === "admin" ? "Admin Portal" : demoRole === "facilitator" ? "Facilitator Portal" : "Learner Dashboard";
+    userRole === "admin" ? "Admin Portal" : userRole === "facilitator" ? "Facilitator Portal" : userRole === "organization" ? "Corporate Portal" : "Learner Dashboard";
 
-  const DashIcon = demoRole === "admin" ? Shield : demoRole === "facilitator" ? GraduationCap : BadgeCheck;
+  const DashIcon = userRole === "admin" ? Shield : userRole === "facilitator" ? GraduationCap : userRole === "organization" ? Building2 : BadgeCheck;
 
   const dashColor =
-    demoRole === "admin"
+    userRole === "admin"
       ? "ring-lani-blue/20 bg-lani-blue/5 text-lani-blue hover:bg-lani-blue/10"
-      : demoRole === "facilitator"
+      : userRole === "facilitator"
+      ? "ring-lani-gold/20 bg-lani-gold/5 text-lani-gold hover:bg-lani-gold/10"
+      : userRole === "organization"
       ? "ring-lani-gold/20 bg-lani-gold/5 text-lani-gold hover:bg-lani-gold/10"
       : "ring-lani-green/20 bg-lani-green/5 text-lani-green hover:bg-lani-green/10";
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-lani-navy/95 backdrop-blur-md text-white">
-      {/* Top Banner Demo Switcher */}
-      <div className="bg-slate-950 px-4 py-1.5 text-center text-xs text-white border-b border-white/5">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2">
-          <span className="flex items-center gap-1 font-medium text-slate-350">
-            <span className="h-2 w-2 rounded-full bg-lani-emerald animate-pulse" />
-            Connected to Supabase
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-lani-gold flex items-center gap-1">
-              <RefreshCw size={11} className="animate-spin-slow" />
-              Demo Switcher:
-            </span>
-            <div className="inline-flex rounded-full bg-white/10 p-0.5 ring-1 ring-white/10">
-              {roleButtons.map((rb) => (
-                <button
-                  key={rb.key}
-                  type="button"
-                  onClick={() => onDemoRoleChange(rb.key)}
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition-all ${
-                    demoRole === rb.key
-                      ? "bg-lani-gold text-lani-navy"
-                      : "text-slate-300 hover:text-white"
-                  }`}
-                >
-                  {rb.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
 
       <div className="mx-auto flex max-w-7xl h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand Logo */}
@@ -128,12 +83,12 @@ export default function Navbar({
         </button>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-6">
+        <nav className="hidden md:flex items-center gap-x-4 lg:gap-x-6 text-[13px]">
           {navItems.map((item) => (
             <button
               key={item.view}
               onClick={() => onNavigate(item.view)}
-              className={`text-sm font-bold transition-colors ${
+              className={`font-bold transition-colors ${
                 currentView === item.view
                   ? "text-lani-gold"
                   : "text-slate-300 hover:text-white"
@@ -158,7 +113,7 @@ export default function Navbar({
             </button>
           )}
 
-          {demoRole !== "visitor" ? (
+          {user ? (
             <div className="relative">
               <button
                 type="button"
@@ -177,11 +132,7 @@ export default function Navbar({
                   <div className="px-3 py-2 border-b border-white/5">
                     <p className="text-xs font-semibold text-slate-400 uppercase">Signed in as</p>
                     <p className="text-sm font-bold text-white truncate">
-                      {demoRole === "admin"
-                        ? "admin@lani.academy"
-                        : demoRole === "facilitator"
-                        ? "facilitator@lani.academy"
-                        : "learner@lani.academy"}
+                      {profile?.email || user.email}
                     </p>
                   </div>
                   <div className="mt-1 grid gap-0.5">
@@ -198,16 +149,15 @@ export default function Navbar({
                       </button>
                     )}
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setProfileOpen(false);
-                        onDemoRoleChange("visitor");
-                        signOut();
+                        await signOut();
                         onNavigate("home");
                       }}
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-400 hover:bg-red-950/20"
                     >
                       <LogOut size={14} />
-                      Sign Out (Demo)
+                      Sign Out
                     </button>
                   </div>
                 </div>
@@ -223,10 +173,10 @@ export default function Navbar({
                 Sign In
               </button>
               <button
-                onClick={() => onNavigate("courses")}
+                onClick={() => onNavigate("signup")}
                 className="btn-primary min-h-9 px-4 py-2 text-xs"
               >
-                Enrol Now
+                Sign Up
               </button>
             </div>
           )}
@@ -234,7 +184,7 @@ export default function Navbar({
 
         {/* Mobile menu button */}
         <div className="flex md:hidden items-center gap-2">
-          {demoRole !== "visitor" && dashboardView && (
+          {user && dashboardView && (
             <button
               onClick={() => onNavigate(dashboardView)}
               className="text-xs font-bold rounded-lg border border-white/10 px-2.5 py-1.5 text-white"
@@ -256,7 +206,7 @@ export default function Navbar({
       {menuOpen && (
         <div className="md:hidden border-t border-white/10 bg-slate-900 px-4 py-4 space-y-4 text-white">
           <nav className="flex flex-col gap-3">
-            {navItems.map((item) => (
+            {[{ label: "Home", view: "home" as View }, ...navItems, ...mobileExtra].map((item) => (
               <button
                 key={item.view}
                 onClick={() => {
@@ -284,17 +234,16 @@ export default function Navbar({
                 {dashboardLabel}
               </button>
             )}
-            {demoRole !== "visitor" ? (
+            {user ? (
               <button
-                onClick={() => {
+                onClick={async () => {
                   setMenuOpen(false);
-                  onDemoRoleChange("visitor");
-                  signOut();
+                  await signOut();
                   onNavigate("home");
                 }}
                 className="w-full rounded-lg bg-red-950/40 text-red-400 hover:bg-red-950/60 py-2.5 text-sm font-bold text-center"
               >
-                Sign Out (Demo)
+                Sign Out
               </button>
             ) : (
               <div className="grid grid-cols-2 gap-2">
@@ -304,7 +253,7 @@ export default function Navbar({
                     setMenuOpen(false);
                     onNavigate("learner");
                   }}
-                  className="btn-secondary border-white/20 text-white hover:bg-white/10 min-h-10 text-center"
+                  className="btn-secondary border-lani-green text-lani-green hover:bg-lani-green/10 min-h-10 text-center"
                 >
                   Sign In
                 </button>
@@ -312,11 +261,11 @@ export default function Navbar({
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
-                    onNavigate("courses");
+                    onNavigate("signup");
                   }}
                   className="btn-primary min-h-10 text-center"
                 >
-                  Enrol
+                  Sign Up
                 </button>
               </div>
             )}

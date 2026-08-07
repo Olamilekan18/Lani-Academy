@@ -7,7 +7,13 @@ export type View =
   | "learner"
   | "facilitator"
   | "admin"
-  | "verify";
+  | "verify"
+  | "signup"
+  | "organization"
+  | "about"
+  | "certification"
+  | "resources"
+  | "contact";
 
 export type DeliveryMode =
   | "Self-paced"
