@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { Course } from "../lib/types";
 import { formatMoney } from "../lib/utils";
+import { dbValidatePromo } from "../lib/db";
 
 type Gateway = "Paystack" | "Flutterwave" | "Bank Transfer";
 
@@ -19,7 +20,7 @@ interface CheckoutModalProps {
   learnerName: string;
   learnerEmail: string;
   onClose: () => void;
-  onPaymentComplete: (gateway: Gateway, reference?: string) => Promise<void>;
+  onPaymentComplete: (gateway: Gateway, reference?: string, amount?: number) => Promise<void>;
 }
 
 // Public keys are safe to expose on the client for both gateways.
@@ -60,6 +61,27 @@ export default function CheckoutModal({
   const [loading, setLoading] = useState(false);
   const [reference, setReference] = useState("");
   const [error, setError] = useState("");
+  const [promo, setPromo] = useState("");
+  const [discount, setDiscount] = useState(0); // percent
+  const [promoMsg, setPromoMsg] = useState("");
+  const [checkingPromo, setCheckingPromo] = useState(false);
+
+  const finalAmount = Math.max(0, Math.round(course.price * (1 - discount / 100)));
+
+  const applyPromo = async () => {
+    if (!promo.trim()) return;
+    setCheckingPromo(true);
+    setPromoMsg("");
+    const res = await dbValidatePromo(promo);
+    setCheckingPromo(false);
+    if (res && res.discountPercent > 0) {
+      setDiscount(res.discountPercent);
+      setPromoMsg(`✓ ${res.discountPercent}% discount applied`);
+    } else {
+      setDiscount(0);
+      setPromoMsg("Invalid or expired code");
+    }
+  };
 
   const liveKey = gateway === "Paystack" ? PAYSTACK_KEY : gateway === "Flutterwave" ? FLUTTERWAVE_KEY : undefined;
   const isCardGateway = gateway === "Paystack" || gateway === "Flutterwave";
@@ -84,7 +106,7 @@ export default function CheckoutModal({
   const finalise = async (gw: Gateway, ref: string) => {
     setLoading(true);
     try {
-      await onPaymentComplete(gw, ref);
+      await onPaymentComplete(gw, ref, finalAmount);
       setReference(ref);
       setStep("success");
     } catch {
@@ -105,7 +127,7 @@ export default function CheckoutModal({
     const handler = window.PaystackPop.setup({
       key: PAYSTACK_KEY,
       email: learnerEmail,
-      amount: Math.round(course.price * 100), // kobo
+      amount: Math.round(finalAmount * 100), // kobo
       currency: "NGN",
       metadata: {
         custom_fields: [
@@ -133,7 +155,7 @@ export default function CheckoutModal({
     window.FlutterwaveCheckout({
       public_key: FLUTTERWAVE_KEY,
       tx_ref: txRef,
-      amount: course.price,
+      amount: finalAmount,
       currency: "NGN",
       payment_options: "card,banktransfer,ussd",
       customer: { email: learnerEmail, name: learnerName },
@@ -222,10 +244,34 @@ export default function CheckoutModal({
                 </div>
               </div>
 
+              {/* Promo code */}
+              <div className="grid gap-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Promo code</span>
+                <div className="flex gap-2">
+                  <input
+                    value={promo}
+                    onChange={(e) => { setPromo(e.target.value.toUpperCase()); setPromoMsg(""); }}
+                    placeholder="Enter code"
+                    className="h-11 flex-1 rounded-lg border border-slate-200 px-3 text-sm uppercase outline-none focus:border-lani-green focus:ring-2 focus:ring-lani-green/10"
+                  />
+                  <button type="button" onClick={applyPromo} disabled={checkingPromo || !promo.trim()} className="btn-secondary min-h-11 px-4 text-xs disabled:opacity-50">
+                    {checkingPromo ? "Checking…" : "Apply"}
+                  </button>
+                </div>
+                {promoMsg && <span className={`text-[11px] font-semibold ${discount > 0 ? "text-lani-green" : "text-red-500"}`}>{promoMsg}</span>}
+              </div>
+
               <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
                 <div>
                   <span className="text-xs text-slate-400">Total payable</span>
-                  <strong className="block text-lg font-bold text-lani-navy">{formatMoney(course.price)}</strong>
+                  {discount > 0 ? (
+                    <div className="flex items-baseline gap-2">
+                      <strong className="block text-lg font-bold text-lani-navy">{formatMoney(finalAmount)}</strong>
+                      <span className="text-xs text-slate-400 line-through">{formatMoney(course.price)}</span>
+                    </div>
+                  ) : (
+                    <strong className="block text-lg font-bold text-lani-navy">{formatMoney(course.price)}</strong>
+                  )}
                 </div>
                 <button type="submit" className="btn-primary">
                   Continue
@@ -277,7 +323,7 @@ export default function CheckoutModal({
                 ) : gateway === "Bank Transfer" ? (
                   "Submit for Confirmation"
                 ) : (
-                  `Pay ${formatMoney(course.price)}`
+                  `Pay ${formatMoney(finalAmount)}`
                 )}
               </button>
               <button type="button" onClick={() => setStep("info")} className="text-xs font-semibold text-slate-400 hover:text-lani-navy">

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { BookOpen, Award, CreditCard, PlayCircle, ShieldCheck, Calendar, ClipboardCheck, User, Bell, ChevronRight, CheckCircle, Clock, FileText, ExternalLink, TrendingUp, AlertCircle, Upload, Send, Loader2 } from "lucide-react";
-import type { Course, Enrollment, Certificate, Transaction, Quiz, QuizAttempt, Assignment, AssignmentSubmission, Announcement, CalendarEvent, Notification } from "../lib/types";
+import { BookOpen, Award, CreditCard, PlayCircle, ShieldCheck, Calendar, ClipboardCheck, User, Bell, ChevronRight, CheckCircle, Clock, FileText, ExternalLink, TrendingUp, AlertCircle, Upload, Send, Loader2, Star } from "lucide-react";
+import type { Course, Enrollment, Certificate, Transaction, Quiz, QuizAttempt, Assignment, AssignmentSubmission, Announcement, CalendarEvent, Notification, Survey, SurveyResponse } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import toast from "react-hot-toast";
 import QuizModal from "../components/QuizModal";
@@ -23,11 +23,14 @@ interface Props {
   notifications: Notification[];
   onOpenPlayer: (c: Course, e: Enrollment) => void;
   onOpenCertificate: (c: Certificate) => void;
+  surveys: Survey[];
+  surveyResponses: SurveyResponse[];
   onTakeQuiz: (q: Quiz, answers: number[], score: number, passed: boolean) => Promise<void> | void;
   onSubmitAssignment: (assignmentId: string, courseId: string, content: string, fileUrl?: string) => Promise<void> | void;
+  onSubmitSurvey: (survey: Survey, ratings: number[], comment: string) => Promise<void> | void;
 }
 
-export default function LearnerDashboard({ enrollments, courses, certificates, transactions, quizzes, quizAttempts, assignments, submissions, announcements, calendarEvents, notifications, onOpenPlayer, onOpenCertificate, onTakeQuiz, onSubmitAssignment }: Props) {
+export default function LearnerDashboard({ enrollments, courses, certificates, transactions, quizzes, quizAttempts, assignments, submissions, announcements, calendarEvents, notifications, surveys, surveyResponses, onOpenPlayer, onOpenCertificate, onTakeQuiz, onSubmitAssignment, onSubmitSurvey }: Props) {
   const { profile, user } = useAuth();
   const myEmail = profile?.email || user?.email || "";
   const [tab, setTab] = useState<Tab>("overview");
@@ -37,6 +40,26 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   const [subContent, setSubContent] = useState("");
   const [subFile, setSubFile] = useState<File | null>(null);
   const [subBusy, setSubBusy] = useState(false);
+
+  // Survey filling state
+  const [openSurvey, setOpenSurvey] = useState<string | null>(null);
+  const [svRatings, setSvRatings] = useState<number[]>([]);
+  const [svComment, setSvComment] = useState("");
+  const [svBusy, setSvBusy] = useState(false);
+
+  const openSurveyForm = (s: Survey) => {
+    setOpenSurvey(s.id);
+    setSvRatings(Array(s.questions.length).fill(0));
+    setSvComment("");
+  };
+  const rate = (qi: number, val: number) => setSvRatings((r) => r.map((x, i) => (i === qi ? val : x)));
+  const handleSurveySubmit = async (s: Survey) => {
+    if (svRatings.some((r) => r === 0)) { toast.error("Please rate every question."); return; }
+    setSvBusy(true);
+    await onSubmitSurvey(s, svRatings, svComment.trim());
+    setSvBusy(false);
+    setOpenSurvey(null);
+  };
 
   const handleAssignmentSubmit = async (a: Assignment) => {
     if (!subContent.trim()) { toast.error("Add your submission text."); return; }
@@ -61,6 +84,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   const myEvents = calendarEvents.filter(ev => enrollments.some(e => e.courseId === ev.courseId)).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
   const myQuizzes = quizzes.filter(q => enrollments.some(e => e.courseId === q.courseId));
   const myAssignments = assignments.filter(a => enrollments.some(e => e.courseId === a.courseId));
+  const mySurveys = surveys.filter(s => enrollments.some(e => e.courseId === s.courseId));
 
   const tabs: {key:Tab;label:string;icon:any}[] = [
     {key:"overview",label:"Overview",icon:TrendingUp},
@@ -326,6 +350,57 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
                 );
               })}
               {myAssignments.length === 0 && <p className="text-xs text-slate-400 py-8 text-center">No assignments available.</p>}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-bold text-lani-navy mb-4">Surveys & Feedback</h3>
+            <div className="grid gap-4">
+              {mySurveys.map(s => {
+                const done = surveyResponses.some(r => r.surveyId === s.id && r.learnerEmail === myEmail);
+                const isOpen = openSurvey === s.id;
+                return (
+                  <div key={s.id} className="rounded-xl border border-slate-200 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-lani-blue">{s.courseTitle} · {s.type}</span>
+                        <h4 className="text-sm font-bold text-lani-navy mt-1">{s.title}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">{s.questions.length} questions</p>
+                      </div>
+                      {done ? (
+                        <span className="inline-flex rounded-full px-3 py-1 text-xs font-bold bg-lani-emerald/15 text-lani-green shrink-0">Completed</span>
+                      ) : !isOpen ? (
+                        <button onClick={() => openSurveyForm(s)} className="btn-primary min-h-9 px-4 text-xs shrink-0"><Star size={13}/>Give feedback</button>
+                      ) : null}
+                    </div>
+
+                    {!done && isOpen && (
+                      <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4">
+                        {s.questions.map((q, qi) => (
+                          <div key={q.id}>
+                            <p className="text-xs font-semibold text-lani-navy">{qi + 1}. {q.prompt}</p>
+                            <div className="mt-2 flex gap-1.5">
+                              {[1, 2, 3, 4, 5].map(n => (
+                                <button key={n} type="button" onClick={() => rate(qi, n)} className={`h-9 w-9 rounded-lg border text-sm font-bold transition-all ${svRatings[qi] >= n ? "border-lani-gold bg-lani-gold/10 text-lani-gold" : "border-slate-200 text-slate-400 hover:border-slate-300"}`}>
+                                  <Star size={15} className={`mx-auto ${svRatings[qi] >= n ? "fill-lani-gold" : ""}`}/>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        <textarea value={svComment} onChange={e => setSvComment(e.target.value)} rows={3} placeholder="Any additional comments (optional)…" className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-lani-green focus:ring-2 focus:ring-lani-green/20"/>
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setOpenSurvey(null)} className="btn-secondary min-h-9 px-4 text-xs">Cancel</button>
+                          <button onClick={() => handleSurveySubmit(s)} disabled={svBusy} className="btn-primary min-h-9 px-4 text-xs">
+                            {svBusy ? <><Loader2 size={13} className="animate-spin"/>Submitting…</> : <><Send size={13}/>Submit feedback</>}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {mySurveys.length === 0 && <p className="text-xs text-slate-400 py-8 text-center">No surveys available.</p>}
             </div>
           </div>
         </div>

@@ -40,6 +40,19 @@ function ctaButton(label: string, url: string): string {
 
 export type EmailContent = { subject: string; html: string };
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Generic admin broadcast — turns a plain-text message into branded HTML.
+export function broadcastEmail(subject: string, message: string): EmailContent {
+  const body = message
+    .split("\n")
+    .map((line) => (line.trim() ? `<p>${escapeHtml(line)}</p>` : "<br/>"))
+    .join("");
+  return { subject, html: shell(subject, body) };
+}
+
 // ── Onboarding ───────────────────────────────────────────────
 export function welcomeEmail(name: string, role = "learner"): EmailContent {
   const roleLabel = role === "facilitator" ? "Facilitator" : role === "organization" ? "Organisation" : "Learner";

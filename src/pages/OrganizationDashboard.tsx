@@ -31,6 +31,11 @@ export default function OrganizationDashboard({ courses }: Props) {
   const [learnerEmail, setLearnerEmail] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("");
 
+  // Bulk enrolment
+  const [bulkText, setBulkText] = useState("");
+  const [bulkCourse, setBulkCourse] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const [proposalThematicArea, setProposalThematicArea] = useState("");
   const [proposalParticipants, setProposalParticipants] = useState(15);
   const [proposalMode, setProposalMode] = useState("Hybrid");
@@ -80,9 +85,54 @@ export default function OrganizationDashboard({ courses }: Props) {
     loadProposals();
     if (courses.length > 0) {
       setSelectedCourse(courses[0].id);
+      setBulkCourse(courses[0].id);
       setProposalThematicArea(courses[0].thematicArea);
     }
   }, [orgName, courses]);
+
+  const handleBulkEnrol = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabase) return;
+    const courseId = bulkCourse || courses[0]?.id;
+    if (!courseId) { toast.error("Select a course."); return; }
+    const lines = bulkText.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) { toast.error("Add at least one learner (one per line)."); return; }
+
+    setBulkBusy(true);
+    const targetCourse = courses.find((c) => c.id === courseId);
+    let enrolled = 0, skipped = 0;
+
+    for (const line of lines) {
+      const parts = line.split(/[,;\t]/).map((p) => p.trim()).filter(Boolean);
+      let name = "", email = "";
+      if (parts.length >= 2) { name = parts[0]; email = parts[1]; }
+      else { email = parts[0]; name = parts[0].split("@")[0]; }
+      if (!email.includes("@")) { skipped++; continue; }
+      try {
+        const { data: existing } = await supabase
+          .from("enrollments").select("id")
+          .eq("course_id", courseId).eq("learner_email", email).maybeSingle();
+        if (existing) { skipped++; continue; }
+        const { error } = await supabase.from("enrollments").insert({
+          id: "enr-" + Math.random().toString(36).substring(2, 8),
+          course_id: courseId, learner_name: name, learner_email: email,
+          payment_status: "Successful", sponsor_organisation: orgName, progress: 0,
+        });
+        if (error) { skipped++; continue; }
+        await supabase.from("transactions").insert({
+          course_id: courseId, learner_email: email, amount: targetCourse?.price || 0,
+          gateway: "Bank Transfer", status: "Successful",
+          receipt_number: "SPON-" + Math.random().toString(36).substring(2, 8).toUpperCase(),
+        });
+        enrolled++;
+      } catch { skipped++; }
+    }
+
+    setBulkBusy(false);
+    setBulkText("");
+    toast.success(`Enrolled ${enrolled}${skipped ? `, skipped ${skipped}` : ""}.`);
+    loadLearners();
+  };
 
   const handleRegisterLearner = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -395,6 +445,34 @@ export default function OrganizationDashboard({ courses }: Props) {
                 )}
               </button>
             </form>
+
+            {/* Bulk enrolment */}
+            <div className="border-t border-slate-200 pt-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Users className="text-lani-blue" size={16} />
+                <h3 className="text-sm font-bold text-lani-navy">Bulk Enrol a Cohort</h3>
+              </div>
+              <form onSubmit={handleBulkEnrol} className="space-y-3">
+                <label className="form-field bg-white">
+                  Course / Program
+                  <select value={bulkCourse} onChange={(e) => setBulkCourse(e.target.value)} required>
+                    {courses.map((c) => <option key={c.id} value={c.id}>{c.title} ({c.code})</option>)}
+                  </select>
+                </label>
+                <label className="form-field bg-white">
+                  Learners — one per line, "Name, email"
+                  <textarea
+                    value={bulkText}
+                    onChange={(e) => setBulkText(e.target.value)}
+                    rows={5}
+                    placeholder={"Samuel Adebayo, s.adebayo@company.com\nJane Doe, jane.doe@company.com"}
+                  />
+                </label>
+                <button type="submit" disabled={bulkBusy} className="btn-secondary w-full justify-center text-xs font-bold min-h-10">
+                  {bulkBusy ? <><Loader2 size={14} className="animate-spin" />Enrolling cohort...</> : "Bulk Enrol Cohort"}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}

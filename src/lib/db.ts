@@ -15,7 +15,10 @@ import type {
   Announcement,
   CalendarEvent,
   Notification,
-  FacilitatorAssignment
+  FacilitatorAssignment,
+  PromoCode,
+  Survey,
+  SurveyResponse
 } from "./types";
 import {
   mockQuizzes,
@@ -407,6 +410,96 @@ export async function dbSaveNotification(notification: Notification): Promise<bo
   if (!supabase) return false;
   const { error } = await supabase.from("notifications").insert(toSnakeCaseKeys(notification));
   if (error) console.error("Error saving notification:", error.message);
+  return !error;
+}
+
+// ── Promo codes ─────────────────────────────────────────────
+export async function dbGetPromos(): Promise<PromoCode[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("promo_codes").select("*").order("created_at", { ascending: false });
+  return toCamelCaseKeys(data || []) as PromoCode[];
+}
+
+export async function dbSavePromo(promo: Partial<PromoCode>): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("promo_codes").upsert(toSnakeCaseKeys(promo));
+  if (error) console.error("Error saving promo:", error.message);
+  return !error;
+}
+
+// Validate a promo code; returns the discount percent or null if invalid.
+export async function dbValidatePromo(code: string): Promise<{ code: string; discountPercent: number } | null> {
+  if (!supabase || !code.trim()) return null;
+  const { data, error } = await supabase
+    .from("promo_codes")
+    .select("*")
+    .eq("code", code.trim().toUpperCase())
+    .maybeSingle();
+  if (error || !data) return null;
+  const p = toCamelCaseKeys(data) as PromoCode;
+  if (!p.active) return null;
+  if (p.expiresAt && new Date(p.expiresAt) < new Date()) return null;
+  if (p.maxUses && p.maxUses > 0 && p.uses >= p.maxUses) return null;
+  return { code: p.code, discountPercent: p.discountPercent };
+}
+
+// ── Wishlist ────────────────────────────────────────────────
+export async function dbGetWishlist(email: string): Promise<string[]> {
+  if (!supabase || !email) return [];
+  const { data } = await supabase.from("wishlists").select("course_id").eq("learner_email", email);
+  return (data || []).map((r: any) => r.course_id as string);
+}
+
+export async function dbAddWishlist(email: string, courseId: string): Promise<boolean> {
+  if (!supabase || !email) return false;
+  const { error } = await supabase.from("wishlists").insert({ learner_email: email, course_id: courseId });
+  return !error;
+}
+
+export async function dbRemoveWishlist(email: string, courseId: string): Promise<boolean> {
+  if (!supabase || !email) return false;
+  const { error } = await supabase.from("wishlists").delete().eq("learner_email", email).eq("course_id", courseId);
+  return !error;
+}
+
+// ── Newsletter ──────────────────────────────────────────────
+export async function dbGetNewsletterSubscribers(): Promise<string[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("newsletter_subscribers").select("email");
+  return (data || []).map((r: any) => r.email as string);
+}
+
+export async function dbSubscribeNewsletter(email: string): Promise<boolean> {
+  if (!supabase || !email) return false;
+  const { error } = await supabase.from("newsletter_subscribers").upsert({ email: email.trim().toLowerCase() });
+  if (error) console.error("Error subscribing:", error.message);
+  return !error;
+}
+
+// ── Surveys ─────────────────────────────────────────────────
+export async function dbGetSurveys(): Promise<Survey[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("surveys").select("*");
+  return toCamelCaseKeys(data || []) as Survey[];
+}
+
+export async function dbSaveSurvey(survey: Survey): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("surveys").upsert(toSnakeCaseKeys(survey));
+  if (error) console.error("Error saving survey:", error.message);
+  return !error;
+}
+
+export async function dbGetSurveyResponses(): Promise<SurveyResponse[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("survey_responses").select("*");
+  return toCamelCaseKeys(data || []) as SurveyResponse[];
+}
+
+export async function dbSaveSurveyResponse(resp: SurveyResponse): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("survey_responses").insert(toSnakeCaseKeys(resp));
+  if (error) console.error("Error saving survey response:", error.message);
   return !error;
 }
 

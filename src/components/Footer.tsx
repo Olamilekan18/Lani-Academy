@@ -1,6 +1,7 @@
 import React from "react";
 import { BookOpen, MapPin, Mail, Phone, ExternalLink } from "lucide-react";
 import toast from "react-hot-toast";
+import { dbSubscribeNewsletter } from "../lib/db";
 import type { View } from "../lib/types";
 
 interface FooterProps {
@@ -120,14 +121,19 @@ export default function Footer({ onNavigate }: FooterProps) {
               Subscribe to our weekly capacity briefings for exclusive executive learning insights and schedule releases.
             </p>
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                toast.success("Thank you for subscribing to our briefings!");
+                const form = e.currentTarget;
+                const email = (new FormData(form).get("email") as string) || "";
+                const ok = await dbSubscribeNewsletter(email);
+                if (ok) { toast.success("Thank you for subscribing to our briefings!"); form.reset(); }
+                else toast.error("Could not subscribe right now. Please try again.");
               }}
               className="mt-6 flex flex-col gap-2 sm:flex-row"
             >
               <input
                 type="email"
+                name="email"
                 placeholder="Work email address"
                 required
                 className="h-10 w-full rounded-lg bg-white/10 px-4 text-sm text-white placeholder:text-slate-500 outline-none ring-1 ring-white/10 focus:ring-lani-green"

@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X } from "lucide-react";
-import type { Course, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt } from "../lib/types";
+import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star } from "lucide-react";
+import type { Course, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt, Survey, SurveyResponse } from "../lib/types";
 import { formatDate } from "../lib/utils";
 import toast from "react-hot-toast";
 
 type DraftQuestion = { question: string; options: string[]; correctIndex: number };
 
-type Tab = "overview"|"courses"|"learners"|"grading"|"quizzes"|"assignments"|"announcements";
+type Tab = "overview"|"courses"|"learners"|"grading"|"quizzes"|"assignments"|"surveys"|"announcements";
 
 interface Props {
   courses: Course[];
@@ -19,13 +19,16 @@ interface Props {
   calendarEvents: CalendarEvent[];
   quizzes: Quiz[];
   quizAttempts: QuizAttempt[];
+  surveys: Survey[];
+  surveyResponses: SurveyResponse[];
   onPostAnnouncement: (a: Omit<Announcement,"id"|"createdAt">) => void;
   onGradeSubmission: (subId: string, score: number, feedback: string) => void;
   onSaveQuiz: (q: Quiz) => Promise<void> | void;
   onSaveAssignment: (a: Assignment) => Promise<void> | void;
+  onSaveSurvey: (s: Survey) => Promise<void> | void;
 }
 
-export default function FacilitatorDashboard({ courses, enrollments, assignments, courseAssignments, submissions, announcements, calendarEvents, quizzes, quizAttempts, onPostAnnouncement, onGradeSubmission, onSaveQuiz, onSaveAssignment }: Props) {
+export default function FacilitatorDashboard({ courses, enrollments, assignments, courseAssignments, submissions, announcements, calendarEvents, quizzes, quizAttempts, surveys, surveyResponses, onPostAnnouncement, onGradeSubmission, onSaveQuiz, onSaveAssignment, onSaveSurvey }: Props) {
   const { profile, user } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
@@ -101,6 +104,46 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
     setACourse(""); setATitle(""); setADesc(""); setADue(""); setAMax("100");
   };
 
+  // Survey builder state
+  const [svCourse, setSvCourse] = useState("");
+  const [svTitle, setSvTitle] = useState("");
+  const [svType, setSvType] = useState<"Pre" | "Post" | "Feedback">("Feedback");
+  const [svPrompts, setSvPrompts] = useState<string[]>(["", "", ""]);
+  const [savingSv, setSavingSv] = useState(false);
+  const mySurveys = surveys.filter(s => quizCourses.some(c => c.id === s.courseId));
+
+  const setPrompt = (i: number, val: string) => setSvPrompts(p => p.map((x, idx) => idx === i ? val : x));
+  const addPrompt = () => setSvPrompts(p => [...p, ""]);
+  const removePrompt = (i: number) => setSvPrompts(p => p.length > 1 ? p.filter((_, idx) => idx !== i) : p);
+
+  const avgRating = (surveyId: string): string => {
+    const resp = surveyResponses.filter(r => r.surveyId === surveyId);
+    const all = resp.flatMap(r => r.ratings).filter(n => typeof n === "number");
+    if (all.length === 0) return "—";
+    return (all.reduce((s, n) => s + n, 0) / all.length).toFixed(1);
+  };
+
+  const submitSurvey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!svCourse) { toast.error("Select a course."); return; }
+    if (!svTitle.trim()) { toast.error("Give the survey a title."); return; }
+    const prompts = svPrompts.map(p => p.trim()).filter(p => p !== "");
+    if (prompts.length === 0) { toast.error("Add at least one question."); return; }
+    const course = quizCourses.find(c => c.id === svCourse);
+    const survey: Survey = {
+      id: "svy-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      courseId: svCourse,
+      courseTitle: course?.title || "",
+      title: svTitle.trim(),
+      type: svType,
+      questions: prompts.map((prompt, i) => ({ id: `sq${i + 1}`, prompt })),
+    };
+    setSavingSv(true);
+    await onSaveSurvey(survey);
+    setSavingSv(false);
+    setSvCourse(""); setSvTitle(""); setSvType("Feedback"); setSvPrompts(["", "", ""]);
+  };
+
   const submitQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!qCourse) { toast.error("Select a course for this quiz."); return; }
@@ -149,6 +192,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
     {key:"grading",label:`Grading (${pendingSubs.length})`,icon:ClipboardCheck},
     {key:"quizzes",label:"Quizzes",icon:ListChecks},
     {key:"assignments",label:"Assignments",icon:FileText},
+    {key:"surveys",label:"Surveys",icon:Star},
     {key:"announcements",label:"Announcements",icon:Megaphone},
   ];
 
@@ -466,6 +510,66 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
               <div className="py-12 text-center border border-slate-200 rounded-2xl bg-slate-50/50">
                 <FileText className="mx-auto text-slate-300" size={40}/>
                 <p className="mt-3 text-xs text-slate-500">No assignments yet. Create one on the left.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SURVEYS */}
+      {tab === "surveys" && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <form onSubmit={submitSurvey} className="rounded-xl border border-slate-200 p-6 space-y-4">
+            <div><span className="eyebrow">Feedback survey</span><h2 className="mt-2 text-lg font-bold text-lani-navy">Create a survey</h2></div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="form-field">Course
+                <select value={svCourse} onChange={e => setSvCourse(e.target.value)} required>
+                  <option value="">Select course...</option>
+                  {quizCourses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                </select>
+              </label>
+              <label className="form-field">Type
+                <select value={svType} onChange={e => setSvType(e.target.value as any)}>
+                  <option value="Feedback">Course Feedback</option>
+                  <option value="Pre">Pre-training</option>
+                  <option value="Post">Post-training</option>
+                </select>
+              </label>
+              <label className="form-field sm:col-span-2">Title<input value={svTitle} onChange={e => setSvTitle(e.target.value)} required placeholder="e.g. End-of-course feedback"/></label>
+            </div>
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Questions (rated 1–5 by learners)</p>
+              {svPrompts.map((p, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input value={p} onChange={e => setPrompt(i, e.target.value)} placeholder={`Question ${i + 1}`} className="min-h-10 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-lani-gold focus:ring-2 focus:ring-lani-gold/20"/>
+                  {svPrompts.length > 1 && <button type="button" onClick={() => removePrompt(i)} className="text-slate-300 hover:text-red-500"><Trash2 size={15}/></button>}
+                </div>
+              ))}
+              <button type="button" onClick={addPrompt} className="text-xs font-bold text-lani-blue hover:underline inline-flex items-center gap-1"><Plus size={12}/>Add question</button>
+            </div>
+            <div className="flex justify-end border-t border-slate-100 pt-4">
+              <button type="submit" disabled={savingSv} className="btn-primary text-xs px-6"><Send size={14}/>{savingSv ? "Publishing..." : "Publish Survey"}</button>
+            </div>
+          </form>
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-lani-navy">Published surveys</h3>
+            {mySurveys.length > 0 ? mySurveys.map(s => {
+              const responses = surveyResponses.filter(r => r.surveyId === s.id);
+              return (
+                <div key={s.id} className="rounded-xl border border-slate-200 p-4">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-lani-gold">{s.courseTitle} · {s.type}</span>
+                  <h4 className="text-sm font-bold text-lani-navy mt-0.5">{s.title}</h4>
+                  <p className="text-xs text-slate-500 mt-1">{s.questions.length} questions</p>
+                  <div className="mt-2 flex items-center gap-3 text-[11px] font-semibold text-slate-500">
+                    <span>{responses.length} responses</span>
+                    <span className="inline-flex items-center gap-1 text-lani-gold"><Star size={12} className="fill-lani-gold"/>{avgRating(s.id)} avg</span>
+                  </div>
+                </div>
+              );
+            }) : (
+              <div className="py-12 text-center border border-slate-200 rounded-2xl bg-slate-50/50">
+                <Star className="mx-auto text-slate-300" size={40}/>
+                <p className="mt-3 text-xs text-slate-500">No surveys yet. Create one on the left.</p>
               </div>
             )}
           </div>

@@ -250,3 +250,38 @@ export type FacilitatorAssignment = {
   courseTitle: string;
   assignedAt: string;
 };
+
+export type PromoCode = {
+  code: string;
+  description: string;
+  discountPercent: number;
+  active: boolean;
+  expiresAt: string | null;
+  maxUses: number;
+  uses: number;
+};
+
+export type SurveyQuestion = {
+  id: string;
+  prompt: string;
+};
+
+export type Survey = {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  title: string;
+  type: "Pre" | "Post" | "Feedback";
+  questions: SurveyQuestion[];
+};
+
+export type SurveyResponse = {
+  id: string;
+  surveyId: string;
+  courseId: string;
+  learnerEmail: string;
+  learnerName: string;
+  ratings: number[];
+  comment: string;
+  submittedAt: string;
+};

@@ -20,6 +20,7 @@ import Certification from "./pages/Certification";
 import Resources from "./pages/Resources";
 import Contact from "./pages/Contact";
 import LearningCalendar from "./pages/LearningCalendar";
+import OrganizationDashboard from "./pages/OrganizationDashboard";
 
 import LoadingScreen from "./components/LoadingScreen";
 import TwoFactorModal from "./components/TwoFactorModal";
@@ -65,13 +66,26 @@ import {
   dbSaveAssignment,
   dbSaveNotification,
   dbSaveFacilitatorAssignment,
-  dbSendEmail
+  dbSendEmail,
+  dbGetWishlist,
+  dbAddWishlist,
+  dbRemoveWishlist,
+  dbGetPromos,
+  dbSavePromo,
+  dbGetSurveys,
+  dbSaveSurvey,
+  dbGetSurveyResponses,
+  dbSaveSurveyResponse,
+  dbGetNewsletterSubscribers
 } from "./lib/db";
 import { formatMoney } from "./lib/utils";
+import { applySeo } from "./lib/seo";
+import { trackPage } from "./lib/analytics";
 import {
   paymentConfirmationEmail,
   certificateReadyEmail,
-  applicationStatusEmail
+  applicationStatusEmail,
+  broadcastEmail
 } from "./lib/emailTemplates";
 import type {
   View,
@@ -89,7 +103,10 @@ import type {
   Announcement,
   CalendarEvent,
   Notification,
-  FacilitatorAssignment
+  FacilitatorAssignment,
+  PromoCode,
+  Survey,
+  SurveyResponse
 } from "./lib/types";
 
 export default function App() {
@@ -107,6 +124,10 @@ export default function App() {
   const [applications, setApplications] = useState<ProgrammeApplication[]>([]);
   const [assets, setAssets] = useState<CmsAsset[]>([]);
   const [wishlist, setWishlist] = useState<string[]>([]);
+  const [promos, setPromos] = useState<PromoCode[]>([]);
+  const [surveys, setSurveys] = useState<Survey[]>([]);
+  const [surveyResponses, setSurveyResponses] = useState<SurveyResponse[]>([]);
+  const [subscribers, setSubscribers] = useState<string[]>([]);
 
   // Mock data states for LMS features not yet in Supabase
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -174,6 +195,17 @@ export default function App() {
       const dbAssets = await dbGetAssets();
       setAssets(dbAssets);
 
+      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers] = await Promise.all([
+        dbGetPromos(),
+        dbGetSurveys(),
+        dbGetSurveyResponses(),
+        dbGetNewsletterSubscribers(),
+      ]);
+      setPromos(dbPromos);
+      setSurveys(dbSurveys);
+      setSurveyResponses(dbSurveyResponses);
+      setSubscribers(dbSubscribers);
+
       // Load extended LMS features from Supabase
       const [
         dbQuizzes,
@@ -225,6 +257,19 @@ export default function App() {
     if (!user) setTwoFactorPassed(false);
   }, [user]);
 
+  // Per-page SEO + analytics page view on navigation.
+  useEffect(() => {
+    const title = applySeo(location.pathname);
+    trackPage(location.pathname, title);
+  }, [location.pathname]);
+
+  // Load the signed-in learner's saved wishlist.
+  useEffect(() => {
+    const email = profile?.email || user?.email;
+    if (email) dbGetWishlist(email).then(setWishlist).catch(() => {});
+    else setWishlist([]);
+  }, [user, profile]);
+
   // Helper for components still using onNavigate
   const navigateToView = (view: View) => {
     if (view === "home") navigate("/");
@@ -233,6 +278,7 @@ export default function App() {
     else if (view === "applications") navigate("/applications");
     else if (view === "learner") navigate("/learn");
     else if (view === "facilitator") navigate("/facilitator");
+    else if (view === "organization") navigate("/organization");
     else if (view === "admin") navigate("/admin");
     else if (view === "verify") navigate("/verify");
     else if (view === "about") navigate("/about");
@@ -242,11 +288,15 @@ export default function App() {
     else if (view === "calendar") navigate("/calendar");
   };
 
-  // Wishlist toggle
-  const handleToggleWishlist = (courseId: string) => {
-    setWishlist((prev) =>
-      prev.includes(courseId) ? prev.filter((id) => id !== courseId) : [...prev, courseId]
-    );
+  // Wishlist toggle — persists for signed-in learners, in-memory otherwise
+  const handleToggleWishlist = async (courseId: string) => {
+    const email = profile?.email || user?.email;
+    const has = wishlist.includes(courseId);
+    setWishlist((prev) => (has ? prev.filter((id) => id !== courseId) : [...prev, courseId]));
+    if (email) {
+      if (has) await dbRemoveWishlist(email, courseId);
+      else await dbAddWishlist(email, courseId);
+    }
   };
 
   // Open course page
@@ -258,7 +308,8 @@ export default function App() {
   // Handle Checkout success
   const handlePaymentComplete = async (
     gateway: "Paystack" | "Flutterwave" | "Bank Transfer",
-    reference?: string
+    reference?: string,
+    amount?: number
   ) => {
     if (!selectedCourse) return;
 
@@ -266,6 +317,7 @@ export default function App() {
     const transactionId = "txn-" + Math.random().toString(36).substring(2, 8);
     const learnerEmail = profile?.email || user?.email || "learner@lani.academy";
     const learnerName = profile?.full_name || "Learner";
+    const paidAmount = amount ?? selectedCourse.price;
 
     const enrollment: Enrollment = {
       id: enrollmentId,
@@ -284,7 +336,7 @@ export default function App() {
       learnerEmail,
       receiptNumber: reference || "LANI-REC-" + Math.floor(100000 + Math.random() * 900000),
       gateway,
-      amount: selectedCourse.price,
+      amount: paidAmount,
       status: gateway === "Bank Transfer" ? "Pending" : "Successful",
       createdAt: new Date().toISOString().split("T")[0],
     };
@@ -298,7 +350,7 @@ export default function App() {
       const mail = paymentConfirmationEmail(
         learnerName,
         selectedCourse.title,
-        formatMoney(selectedCourse.price),
+        formatMoney(paidAmount),
         transaction.receiptNumber,
         gateway === "Bank Transfer"
       );
@@ -306,7 +358,7 @@ export default function App() {
       notify(
         "payment",
         gateway === "Bank Transfer" ? "Enrolment received" : "Payment successful",
-        `${selectedCourse.title} — ${formatMoney(selectedCourse.price)}`,
+        `${selectedCourse.title} — ${formatMoney(paidAmount)}`,
         learnerEmail
       );
 
@@ -482,6 +534,57 @@ export default function App() {
     else toast.error("Could not save assignment.");
   };
 
+  const handleBroadcast = async (emails: string[], subject: string, message: string) => {
+    const unique = Array.from(
+      new Set(emails.map((e) => (e || "").trim().toLowerCase()).filter((e) => e.includes("@")))
+    );
+    if (unique.length === 0) {
+      toast.error("No valid recipients for that audience.");
+      return;
+    }
+    const mail = broadcastEmail(subject, message);
+    let sent = 0;
+    for (const to of unique) {
+      const ok = await dbSendEmail(to, mail.subject, mail.html);
+      if (ok) sent++;
+    }
+    if (sent > 0) toast.success(`Broadcast sent to ${sent} recipient(s).`);
+    else toast(`Queued for ${unique.length} recipient(s). Connect Resend to deliver.`);
+  };
+
+  const handleSavePromo = async (promo: Partial<PromoCode>) => {
+    const ok = await dbSavePromo(promo);
+    await loadDatabase();
+    if (ok) toast.success(`Promo code ${promo.code} saved`);
+    else toast.error("Could not save promo code.");
+  };
+
+  const handleSaveSurvey = async (survey: Survey) => {
+    const ok = await dbSaveSurvey(survey);
+    await loadDatabase();
+    if (ok) toast.success(`Survey "${survey.title}" published`);
+    else toast.error("Could not save survey.");
+  };
+
+  const handleSubmitSurvey = async (survey: Survey, ratings: number[], comment: string) => {
+    const learnerEmail = profile?.email || user?.email || "";
+    const learnerName = profile?.full_name || "Learner";
+    const resp: SurveyResponse = {
+      id: "sresp-" + Date.now().toString(36),
+      surveyId: survey.id,
+      courseId: survey.courseId,
+      learnerEmail,
+      learnerName,
+      ratings,
+      comment,
+      submittedAt: new Date().toISOString(),
+    };
+    const ok = await dbSaveSurveyResponse(resp);
+    await loadDatabase();
+    if (ok) toast.success("Thanks for your feedback!");
+    else toast.error("Could not submit feedback.");
+  };
+
   // Fire-and-forget in-app notification (targeted to a learner, or broadcast).
   const notify = (
     type: Notification["type"],
@@ -547,6 +650,7 @@ export default function App() {
     if (path.startsWith("/applications")) return "applications";
     if (path.startsWith("/learn")) return "learner";
     if (path.startsWith("/facilitator")) return "facilitator";
+    if (path.startsWith("/organization")) return "organization";
     if (path.startsWith("/admin")) return "admin";
     if (path.startsWith("/verify")) return "verify";
     if (path.startsWith("/about")) return "about";
@@ -561,6 +665,7 @@ export default function App() {
   const roleHome = (role?: string): string => {
     if (role === "admin" || role === "super_admin") return "/admin";
     if (role === "facilitator") return "/facilitator";
+    if (role === "organization") return "/organization";
     return "/learn";
   };
 
@@ -571,7 +676,7 @@ export default function App() {
   //  - correct role → render the dashboard
   const guardDashboard = (
     allowed: string[],
-    portalRole: "learner" | "facilitator" | "admin",
+    portalRole: "learner" | "facilitator" | "admin" | "organization",
     dashboard: React.ReactNode
   ): React.ReactNode => {
     if (!user) {
@@ -721,10 +826,13 @@ export default function App() {
             announcements={announcements}
             calendarEvents={calendarEvents}
             notifications={notifications}
+            surveys={surveys}
+            surveyResponses={surveyResponses}
             onOpenPlayer={(c, e) => setActivePlayer({ course: c, enrollment: e })}
             onOpenCertificate={setActiveCertificate}
             onTakeQuiz={handleTakeQuiz}
             onSubmitAssignment={handleSubmitAssignment}
+            onSubmitSurvey={handleSubmitSurvey}
           />
         )} />
 
@@ -739,11 +847,18 @@ export default function App() {
             calendarEvents={calendarEvents}
             quizzes={quizzes}
             quizAttempts={quizAttempts}
+            surveys={surveys}
+            surveyResponses={surveyResponses}
             onPostAnnouncement={handlePostAnnouncement}
             onGradeSubmission={handleGradeSubmission}
             onSaveQuiz={handleSaveQuiz}
             onSaveAssignment={handleSaveAssignment}
+            onSaveSurvey={handleSaveSurvey}
           />
+        )} />
+
+        <Route path="/organization" element={guardDashboard(["organization"], "organization",
+          <OrganizationDashboard courses={courses} />
         )} />
 
         <Route path="/admin" element={guardDashboard(["admin", "super_admin"], "admin",
@@ -756,6 +871,8 @@ export default function App() {
             applications={applications}
             assets={assets}
             facilitators={facilitators}
+            promos={promos}
+            subscribers={subscribers}
             onUpdateLeadStage={handleUpdateLeadStage}
             onUpdateAppStatus={handleUpdateAppStatus}
             onAddAsset={handleAddAsset}
@@ -763,6 +880,8 @@ export default function App() {
             onAssignFacilitator={handleAssignFacilitator}
             onRefreshData={loadDatabase}
             onUpdatePaymentStatus={handleUpdatePaymentStatus}
+            onSavePromo={handleSavePromo}
+            onBroadcast={handleBroadcast}
           />
         )} />
 

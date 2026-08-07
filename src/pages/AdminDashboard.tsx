@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save } from "lucide-react";
+import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment } from "../lib/types";
+import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { seedDatabase, dbUploadFile } from "../lib/db";
 import toast from "react-hot-toast";
 
-type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms";
+type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"promos"|"broadcast";
 
 interface Props {
   courses: Course[];
@@ -17,6 +17,10 @@ interface Props {
   applications: ProgrammeApplication[];
   assets: CmsAsset[];
   facilitators: {fullName: string, email: string}[];
+  promos: PromoCode[];
+  subscribers: string[];
+  onSavePromo: (p: Partial<PromoCode>) => Promise<void> | void;
+  onBroadcast: (emails: string[], subject: string, message: string) => Promise<void> | void;
   onUpdateLeadStage: (id: string, stage: CorporateLead["stage"]) => Promise<void>;
   onUpdateAppStatus: (id: string, status: ProgrammeApplication["status"]) => Promise<void>;
   onAddAsset: (d: any) => Promise<void>;
@@ -28,7 +32,7 @@ interface Props {
 
 const COLORS = ["#087443","#0b66c3","#c9972b","#d95845","#10a768","#6366f1","#ec4899","#14b8a6"];
 
-export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
+export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, onSavePromo, onBroadcast, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
   const [tab, setTab] = useState<Tab>("overview");
   const [seeding, setSeeding] = useState(false);
   const [addingAsset, setAddingAsset] = useState(false);
@@ -203,7 +207,53 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     {key:"applications",label:"Applications",icon:ClipboardCheck,count:applications.length},
     {key:"certificates",label:"Certificates",icon:Award,count:certificates.length},
     {key:"cms",label:"CMS Assets",icon:FileText,count:assets.length},
+    {key:"promos",label:"Promo Codes",icon:Tag,count:promos.length},
+    {key:"broadcast",label:"Broadcast",icon:Send},
   ];
+
+  // Broadcast email state
+  const [bcAudience, setBcAudience] = useState("learners");
+  const [bcCourse, setBcCourse] = useState("");
+  const [bcCustom, setBcCustom] = useState("");
+  const [bcSubject, setBcSubject] = useState("");
+  const [bcMessage, setBcMessage] = useState("");
+  const [bcBusy, setBcBusy] = useState(false);
+
+  const bcRecipients = (): string[] => {
+    if (bcAudience === "learners") return enrollments.map(e => e.learnerEmail);
+    if (bcAudience === "course") return enrollments.filter(e => e.courseId === bcCourse).map(e => e.learnerEmail);
+    if (bcAudience === "leads") return leads.map(l => l.email);
+    if (bcAudience === "subscribers") return subscribers;
+    if (bcAudience === "custom") return bcCustom.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+    return [];
+  };
+  const bcCount = Array.from(new Set(bcRecipients().map(e => (e || "").trim().toLowerCase()).filter(e => e.includes("@")))).length;
+
+  const handleSendBroadcast = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!bcSubject.trim() || !bcMessage.trim()) { toast.error("Add a subject and message."); return; }
+    if (bcCount === 0) { toast.error("No valid recipients for that audience."); return; }
+    setBcBusy(true);
+    await onBroadcast(bcRecipients(), bcSubject.trim(), bcMessage.trim());
+    setBcBusy(false);
+    setBcSubject(""); setBcMessage("");
+  };
+
+  const handleSavePromoSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    await onSavePromo({
+      code: (fd.get("code") as string).trim().toUpperCase(),
+      description: (fd.get("pdesc") as string) || "",
+      discountPercent: Number(fd.get("discount")) || 0,
+      active: true,
+      expiresAt: (fd.get("expires") as string) || null,
+      maxUses: Number(fd.get("maxUses")) || 0,
+      uses: 0,
+    });
+    form.reset();
+  };
 
   return (
     <div className="section bg-white text-left min-h-[50rem]">
@@ -618,6 +668,87 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
               </table>
             ) : <div className="py-16 text-center"><FileText className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No Assets</h3></div>}
           </div>
+        </div>
+      )}
+
+      {/* PROMOS */}
+      {tab === "promos" && (
+        <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+          <form className="form-panel border border-slate-200" onSubmit={handleSavePromoSubmit}>
+            <div><span className="eyebrow">Discount</span><h2 className="mt-3 text-lg font-bold text-lani-navy">Create Promo Code</h2></div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="form-field">Code<input name="code" required placeholder="e.g. LAUNCH20" className="uppercase"/></label>
+              <label className="form-field">Discount (%)<input name="discount" type="number" min={1} max={100} required defaultValue={10}/></label>
+              <label className="form-field sm:col-span-2">Description<input name="pdesc" placeholder="e.g. Launch offer"/></label>
+              <label className="form-field">Expires (optional)<input name="expires" type="date"/></label>
+              <label className="form-field">Max uses (0 = ∞)<input name="maxUses" type="number" min={0} defaultValue={0}/></label>
+            </div>
+            <button type="submit" className="btn-primary w-full justify-center text-xs"><Tag size={14}/>Save Promo Code</button>
+          </form>
+          <div className="table-shell border border-slate-200">
+            {promos.length > 0 ? (
+              <table>
+                <thead><tr><th>Code</th><th>Discount</th><th>Uses</th><th>Expires</th><th>Status</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {promos.map(p => (
+                    <tr key={p.code}>
+                      <td><strong className="font-mono">{p.code}</strong><span>{p.description}</span></td>
+                      <td className="font-bold text-lani-navy">{p.discountPercent}%</td>
+                      <td className="text-xs">{p.uses}{p.maxUses ? ` / ${p.maxUses}` : ""}</td>
+                      <td className="text-xs">{p.expiresAt ? formatDate(p.expiresAt) : "—"}</td>
+                      <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${p.active?"bg-lani-emerald/15 text-lani-green":"bg-slate-100 text-slate-500"}`}>{p.active?"Active":"Inactive"}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <div className="py-16 text-center"><Tag className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No promo codes</h3></div>}
+          </div>
+        </div>
+      )}
+
+      {/* BROADCAST */}
+      {tab === "broadcast" && (
+        <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="rounded-xl border border-slate-200 p-5 space-y-3 self-start">
+            <h3 className="text-sm font-bold text-lani-navy flex items-center gap-2"><Send size={15} className="text-lani-blue"/>Audience</h3>
+            {[
+              { key: "learners", label: "All learners", count: new Set(enrollments.map(e => e.learnerEmail)).size },
+              { key: "course", label: "Learners of a course", count: null },
+              { key: "leads", label: "Corporate leads", count: leads.length },
+              { key: "subscribers", label: "Newsletter subscribers", count: subscribers.length },
+              { key: "custom", label: "Custom email list", count: null },
+            ].map(a => (
+              <label key={a.key} className={`flex items-center justify-between rounded-lg border p-3 text-sm cursor-pointer transition-all ${bcAudience === a.key ? "border-lani-blue bg-lani-blue/5" : "border-slate-200 hover:bg-slate-50"}`}>
+                <span className="flex items-center gap-2 font-semibold text-lani-navy">
+                  <input type="radio" name="bcAudience" checked={bcAudience === a.key} onChange={() => setBcAudience(a.key)} className="accent-lani-blue"/>
+                  {a.label}
+                </span>
+                {a.count !== null && <span className="text-[10px] font-bold text-slate-400">{a.count}</span>}
+              </label>
+            ))}
+            {bcAudience === "course" && (
+              <select value={bcCourse} onChange={e => setBcCourse(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <option value="">Select a course...</option>
+                {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </select>
+            )}
+            {bcAudience === "custom" && (
+              <textarea value={bcCustom} onChange={e => setBcCustom(e.target.value)} rows={4} placeholder="Emails separated by comma or new line" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"/>
+            )}
+          </div>
+
+          <form onSubmit={handleSendBroadcast} className="form-panel border border-slate-200">
+            <div><span className="eyebrow">Compose</span><h2 className="mt-3 text-lg font-bold text-lani-navy">Broadcast Message</h2></div>
+            <label className="form-field">Subject<input value={bcSubject} onChange={e => setBcSubject(e.target.value)} required placeholder="e.g. New cohort now open"/></label>
+            <label className="form-field">Message<textarea value={bcMessage} onChange={e => setBcMessage(e.target.value)} required rows={8} placeholder="Write your message. Line breaks are preserved."/></label>
+            <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+              <span className="text-xs font-semibold text-slate-500">Recipients: <strong className="text-lani-navy">{bcCount}</strong></span>
+              <button type="submit" disabled={bcBusy || bcCount === 0} className="btn-primary text-xs px-6 disabled:opacity-50">
+                <Send size={14}/>{bcBusy ? "Sending..." : `Send to ${bcCount}`}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">Emails are delivered via the send-email function (Resend). Until it's connected, this records intent without sending.</p>
+          </form>
         </div>
       )}
 
