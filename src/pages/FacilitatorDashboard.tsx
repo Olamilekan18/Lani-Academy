@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star } from "lucide-react";
 import type { Course, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt, Survey, SurveyResponse } from "../lib/types";
@@ -30,7 +30,10 @@ interface Props {
 
 export default function FacilitatorDashboard({ courses, enrollments, assignments, courseAssignments, submissions, announcements, calendarEvents, quizzes, quizAttempts, surveys, surveyResponses, onPostAnnouncement, onGradeSubmission, onSaveQuiz, onSaveAssignment, onSaveSurvey }: Props) {
   const { profile, user } = useAuth();
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(() => {
+    try { return (localStorage.getItem("lani-facilitator-tab") as Tab) || "overview"; } catch { return "overview"; }
+  });
+  useEffect(() => { try { localStorage.setItem("lani-facilitator-tab", tab); } catch { /* ignore */ } }, [tab]);
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [gradingId, setGradingId] = useState<string|null>(null);
   const [gradeScore, setGradeScore] = useState("");

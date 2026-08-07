@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
 import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode } from "../lib/types";
@@ -33,7 +33,10 @@ interface Props {
 const COLORS = ["#087443","#0b66c3","#c9972b","#d95845","#10a768","#6366f1","#ec4899","#14b8a6"];
 
 export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, onSavePromo, onBroadcast, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(() => {
+    try { return (localStorage.getItem("lani-admin-tab") as Tab) || "overview"; } catch { return "overview"; }
+  });
+  useEffect(() => { try { localStorage.setItem("lani-admin-tab", tab); } catch { /* ignore */ } }, [tab]);
   const [seeding, setSeeding] = useState(false);
   const [addingAsset, setAddingAsset] = useState(false);
   const [isAddingCourse, setIsAddingCourse] = useState(false);

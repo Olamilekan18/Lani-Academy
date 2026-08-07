@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { BookOpen, Award, CreditCard, PlayCircle, ShieldCheck, Calendar, ClipboardCheck, User, Bell, ChevronRight, CheckCircle, Clock, FileText, ExternalLink, TrendingUp, AlertCircle, Upload, Send, Loader2, Star } from "lucide-react";
 import type { Course, Enrollment, Certificate, Transaction, Quiz, QuizAttempt, Assignment, AssignmentSubmission, Announcement, CalendarEvent, Notification, Survey, SurveyResponse } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
@@ -33,7 +33,10 @@ interface Props {
 export default function LearnerDashboard({ enrollments, courses, certificates, transactions, quizzes, quizAttempts, assignments, submissions, announcements, calendarEvents, notifications, surveys, surveyResponses, onOpenPlayer, onOpenCertificate, onTakeQuiz, onSubmitAssignment, onSubmitSurvey }: Props) {
   const { profile, user } = useAuth();
   const myEmail = profile?.email || user?.email || "";
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(() => {
+    try { return (localStorage.getItem("lani-learner-tab") as Tab) || "overview"; } catch { return "overview"; }
+  });
+  useEffect(() => { try { localStorage.setItem("lani-learner-tab", tab); } catch { /* ignore */ } }, [tab]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [submitFor, setSubmitFor] = useState<string | null>(null);

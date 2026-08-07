@@ -26,20 +26,59 @@ export default function Navbar({ currentView, onNavigate }: NavbarProps) {
   const userRole = user ? profile?.role ?? "learner" : "visitor";
   const displayName = user ? profile?.full_name || profile?.email || "User" : "Guest";
 
-  const navItems = [
-    { label: "Courses", view: "courses" as View },
-    { label: "Certification", view: "certification" as View },
-    { label: "Calendar", view: "calendar" as View },
-    { label: "B2B Training", view: "corporate" as View },
-    { label: "Scholarships", view: "applications" as View },
-    { label: "Resources", view: "resources" as View },
-    { label: "About", view: "about" as View },
+  // The navbar adapts to who's signed in. Each role's own dashboard is the
+  // first item so there's always a clear way back to it.
+  type NavItem = { label: string; view: View };
+  const publicNav: NavItem[] = [
+    { label: "Courses", view: "courses" },
+    { label: "Certification", view: "certification" },
+    { label: "Calendar", view: "calendar" },
+    { label: "B2B Training", view: "corporate" },
+    { label: "Scholarships", view: "applications" },
+    { label: "Resources", view: "resources" },
+    { label: "About", view: "about" },
   ];
 
-  const mobileExtra = [
-    { label: "Verify Certificate", view: "verify" as View },
-    { label: "Contact", view: "contact" as View },
-  ];
+  const roleNav: Record<string, NavItem[]> = {
+    admin: [
+      { label: "Dashboard", view: "admin" },
+      { label: "Courses", view: "courses" },
+      { label: "Verify", view: "verify" },
+      { label: "Resources", view: "resources" },
+    ],
+    super_admin: [
+      { label: "Dashboard", view: "admin" },
+      { label: "Courses", view: "courses" },
+      { label: "Verify", view: "verify" },
+      { label: "Resources", view: "resources" },
+    ],
+    facilitator: [
+      { label: "Dashboard", view: "facilitator" },
+      { label: "Courses", view: "courses" },
+      { label: "Calendar", view: "calendar" },
+      { label: "Resources", view: "resources" },
+    ],
+    organization: [
+      { label: "Corporate Dashboard", view: "organization" },
+      { label: "Courses", view: "courses" },
+      { label: "B2B Training", view: "corporate" },
+      { label: "Calendar", view: "calendar" },
+    ],
+    learner: [
+      { label: "My Learning", view: "learner" },
+      { label: "Courses", view: "courses" },
+      { label: "Calendar", view: "calendar" },
+      { label: "Certification", view: "certification" },
+      { label: "Resources", view: "resources" },
+    ],
+  };
+
+  const navItems: NavItem[] = roleNav[userRole] ?? publicNav;
+
+  const mobileExtra: NavItem[] = ([
+    { label: "Verify Certificate", view: "verify" },
+    { label: "Contact", view: "contact" },
+  ] as NavItem[]).filter((m) => !navItems.some((n) => n.view === m.view));
 
   const dashboardView: View | null =
     userRole === "admin" ? "admin" : userRole === "facilitator" ? "facilitator" : userRole === "organization" ? "organization" : userRole === "learner" ? "learner" : null;
@@ -91,16 +130,6 @@ export default function Navbar({ currentView, onNavigate }: NavbarProps) {
 
         {/* Right actions */}
         <div className="hidden items-center gap-2.5 md:flex">
-          {dashboardView && (
-            <button
-              onClick={() => onNavigate(dashboardView)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold ring-1 transition-all ${dashColor}`}
-            >
-              <DashIcon size={14} />
-              {dashboardLabel}
-            </button>
-          )}
-
           {user ? (
             <div className="relative">
               <button
