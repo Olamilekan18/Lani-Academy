@@ -34,14 +34,17 @@ export default function Navbar({
   const navItems = [
     { label: "Courses", view: "courses" as View },
     { label: "Certification", view: "certification" as View },
+    { label: "Calendar", view: "calendar" as View },
     { label: "B2B Training", view: "corporate" as View },
     { label: "Scholarships", view: "applications" as View },
     { label: "Resources", view: "resources" as View },
     { label: "About", view: "about" as View },
-    { label: "Verify", view: "verify" as View },
   ];
 
-  const mobileExtra = [{ label: "Contact", view: "contact" as View }];
+  const mobileExtra = [
+    { label: "Verify Certificate", view: "verify" as View },
+    { label: "Contact", view: "contact" as View },
+  ];
 
   const dashboardView: View | null =
     userRole === "admin" ? "admin" : userRole === "facilitator" ? "facilitator" : userRole === "organization" ? "organization" : userRole === "learner" ? "learner" : null;

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
+import { dbSendEmail } from "../lib/db";
+import { welcomeEmail } from "../lib/emailTemplates";
 import { LogIn, UserPlus, Key, Mail, ShieldAlert, Loader2, Sparkles, BookOpen, Shield } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
@@ -71,6 +73,10 @@ export default function Login({ portalRole, onSuccess, onNavigate }: LoginProps)
             updatePayload.job_title = jobTitle;
           }
           await updateProfile(updatePayload);
+
+          // Welcome email (no-op until Resend is connected)
+          const wmail = welcomeEmail(fullName, portalRole);
+          void dbSendEmail(email, wmail.subject, wmail.html);
 
           // Go straight into the app regardless of email confirmation blocker
           onSuccess();

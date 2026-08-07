@@ -21,13 +21,30 @@ export default function CoursePlayer({
     m.lessons.map((l) => ({ moduleTitle: m.title, lessonTitle: l }))
   );
 
-  const [activeLessonIndex, setActiveLessonIndex] = useState(0);
-  const [completed, setCompleted] = useState<string[]>(enrollment.completedLessons || []);
+  const initialCompleted = enrollment.completedLessons || [];
+  // Resume from the first lesson the learner hasn't completed yet
+  const firstIncomplete = allLessons.findIndex((l) => !initialCompleted.includes(l.lessonTitle));
+
+  const [activeLessonIndex, setActiveLessonIndex] = useState(firstIncomplete === -1 ? 0 : firstIncomplete);
+  const [completed, setCompleted] = useState<string[]>(initialCompleted);
   const [saving, setSaving] = useState(false);
 
   const activeLesson = allLessons[activeLessonIndex] || {
     moduleTitle: "Introduction",
     lessonTitle: "Welcome to LANI Academy",
+  };
+
+  const progress = Math.min(100, Math.round((completed.length / Math.max(1, allLessons.length)) * 100));
+  const isComplete = progress === 100 && allLessons.length > 0;
+  const materialFiles = course.materialFiles || [];
+
+  // Build an embeddable video element from an intro/lesson URL
+  const renderVideo = (url: string) => {
+    const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/);
+    const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (yt) return <iframe title="lesson" src={`https://www.youtube.com/embed/${yt[1]}`} className="absolute inset-0 h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />;
+    if (vimeo) return <iframe title="lesson" src={`https://player.vimeo.com/video/${vimeo[1]}`} className="absolute inset-0 h-full w-full" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />;
+    return <video controls src={url} className="absolute inset-0 h-full w-full bg-black" />;
   };
 
   const handleToggleLessonComplete = async (lessonTitle: string) => {
@@ -108,26 +125,30 @@ export default function CoursePlayer({
       <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Left Side: Video & Details */}
         <div className="flex flex-1 flex-col overflow-y-auto bg-slate-950 p-6 lg:p-8">
-          {/* Simulated Video Player */}
+          {/* Video Player — real stream when a URL is set, else a placeholder */}
           <div className="relative aspect-video w-full rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center">
-            <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 to-slate-900 opacity-60" />
-            
-            <div className="relative z-10 text-center px-4">
-              <PlayCircle size={64} className="mx-auto text-lani-gold animate-pulse mb-4" />
-              <span className="eyebrow border-white/20 bg-white/5 text-white/90">Syllabus Video Stream</span>
-              <h3 className="mt-3 text-xl font-bold leading-tight">{activeLesson.lessonTitle}</h3>
-              <p className="mt-1.5 text-xs text-slate-400">Module: {activeLesson.moduleTitle}</p>
-            </div>
-
-            {/* Bottom Player Overlay Bar */}
-            <div className="absolute bottom-0 left-0 right-0 h-12 bg-black/60 backdrop-blur px-4 flex items-center justify-between text-xs text-slate-300">
-              <span className="font-semibold">0:00 / 15:00</span>
-              <div className="flex-1 mx-4 h-1 rounded bg-white/20 overflow-hidden">
-                <div className="h-full bg-lani-green w-1/5" />
-              </div>
-              <span>HD / English</span>
-            </div>
+            {course.videoUrl ? (
+              renderVideo(course.videoUrl)
+            ) : (
+              <>
+                <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 to-slate-900 opacity-60" />
+                <div className="relative z-10 text-center px-4">
+                  <PlayCircle size={64} className="mx-auto text-lani-gold animate-pulse mb-4" />
+                  <span className="eyebrow border-white/20 bg-white/5 text-white/90">Lesson Video</span>
+                  <h3 className="mt-3 text-xl font-bold leading-tight">{activeLesson.lessonTitle}</h3>
+                  <p className="mt-1.5 text-xs text-slate-400">Module: {activeLesson.moduleTitle}</p>
+                  <p className="mt-3 text-[11px] text-slate-500">No video uploaded yet — your facilitator will add one soon.</p>
+                </div>
+              </>
+            )}
           </div>
+
+          {isComplete && (
+            <div className="mt-6 flex items-center gap-3 rounded-xl border border-lani-emerald/30 bg-lani-emerald/10 p-4 text-sm font-semibold text-lani-green">
+              <CheckCircle2 size={20} />
+              Course complete — your certificate has been issued. Close the player to view it in your dashboard.
+            </div>
+          )}
 
           {/* Lesson Resources & Downloads */}
           <div className="mt-8 grid gap-6 md:grid-cols-2">
@@ -148,34 +169,32 @@ export default function CoursePlayer({
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h2 className="text-md font-bold text-white tracking-tight">Accompanying Materials</h2>
               <div className="mt-4 grid gap-3">
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    toast.success("Mock file downloaded successfully.");
-                  }}
-                  className="flex items-center justify-between rounded-lg bg-slate-900 p-3 text-xs font-semibold text-slate-300 hover:bg-slate-850 hover:text-white transition-all"
-                >
-                  <span className="flex items-center gap-2">
-                    <FileText size={16} className="text-lani-gold" />
-                    LectureSlides_{course.code}.pdf
-                  </span>
-                  <Download size={14} />
-                </a>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    toast.success("Mock case study downloaded successfully.");
-                  }}
-                  className="flex items-center justify-between rounded-lg bg-slate-900 p-3 text-xs font-semibold text-slate-300 hover:bg-slate-850 hover:text-white transition-all"
-                >
-                  <span className="flex items-center gap-2">
-                    <FileText size={16} className="text-lani-gold" />
-                    CaseStudy_Workbook.xlsx
-                  </span>
-                  <Download size={14} />
-                </a>
+                {materialFiles.length > 0 ? (
+                  materialFiles.map((f, i) => (
+                    <a
+                      key={i}
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between rounded-lg bg-slate-900 p-3 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <FileText size={16} className="text-lani-gold shrink-0" />
+                        <span className="truncate">{f.name}</span>
+                      </span>
+                      <Download size={14} className="shrink-0" />
+                    </a>
+                  ))
+                ) : course.materials.length > 0 ? (
+                  course.materials.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg bg-slate-900 p-3 text-xs font-semibold text-slate-400">
+                      <FileText size={16} className="text-lani-gold shrink-0" />
+                      <span className="truncate">{m}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-500">No materials uploaded yet.</p>
+                )}
               </div>
             </div>
           </div>

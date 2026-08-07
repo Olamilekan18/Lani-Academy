@@ -3,7 +3,7 @@ import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, Refresh
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
 import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
-import { seedDatabase } from "../lib/db";
+import { seedDatabase, dbUploadFile } from "../lib/db";
 import toast from "react-hot-toast";
 
 type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms";
@@ -89,9 +89,29 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   const handleSeed = async () => { setSeeding(true); const ok = await seedDatabase(); if(ok){toast.success("Courses seeded!"); await onRefreshData();}else{toast.error("Seed failed.");} setSeeding(false); };
 
   const handleSubmitAsset = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); setAddingAsset(true);
-    const fd = new FormData(e.currentTarget);
-    try { await onAddAsset({name:fd.get("assetName"),type:fd.get("assetType"),placement:fd.get("placement"),owner:fd.get("owner")||"Content Manager",status:fd.get("status")||"Draft"}); e.currentTarget.reset(); } catch(err){console.error(err);}
+    e.preventDefault();
+    const form = e.currentTarget;
+    setAddingAsset(true);
+    const fd = new FormData(form);
+    try {
+      const file = fd.get("assetFile") as File | null;
+      let url: string | undefined;
+      if (file && file.size > 0) {
+        const uploaded = await dbUploadFile(file, "cms");
+        if (!uploaded) { toast.error("File upload failed."); setAddingAsset(false); return; }
+        url = uploaded;
+      }
+      await onAddAsset({
+        name: fd.get("assetName"),
+        type: fd.get("assetType"),
+        placement: fd.get("placement"),
+        owner: fd.get("owner") || "Content Manager",
+        status: fd.get("status") || "Draft",
+        url,
+      });
+      toast.success("Asset registered.");
+      form.reset();
+    } catch (err) { console.error(err); }
     setAddingAsset(false);
   };
 
@@ -99,6 +119,15 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     e.preventDefault();
     setAddingCourseObj(true);
     const fd = new FormData(e.currentTarget);
+
+    // Upload any attached course material files to Storage
+    const files = (fd.getAll("materialFiles") as File[]).filter(f => f && f.size > 0);
+    const materialFiles: { name: string; url: string }[] = [];
+    for (const f of files) {
+      const url = await dbUploadFile(f, "materials");
+      if (url) materialFiles.push({ name: f.name, url });
+    }
+
     const newCourse: Partial<Course> = {
       id: "course-" + Math.random().toString(36).substring(2, 9),
       title: fd.get("title") as string,
@@ -119,9 +148,11 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
       fullDescription: (fd.get("shortDescription") as string) + " (Full description pending)",
       outcomes: ["Understand core concepts", "Apply knowledge in practical scenarios", "Earn certification"],
       audience: ["Professionals", "Students"],
-      deliveryModes: ["Online", "Self-paced"] as any[],
+      deliveryModes: ["Virtual", "Self-paced"] as any[],
       modules: [],
       materials: [],
+      videoUrl: (fd.get("videoUrl") as string) || undefined,
+      materialFiles,
       assessment: "Final Quiz",
       featured: false,
       certification: "Certificate of Completion",
@@ -412,6 +443,11 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                   <label className="form-field">Cover Image URL<input name="image" placeholder="https://..."/></label>
                 </div>
 
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <label className="form-field">Intro / Lesson Video URL<input name="videoUrl" placeholder="YouTube, Vimeo, or direct .mp4 link"/></label>
+                  <label className="form-field">Course Materials (files)<input name="materialFiles" type="file" multiple accept="image/*,application/pdf,video/*,.ppt,.pptx,.doc,.docx,.xls,.xlsx"/></label>
+                </div>
+
                 <label className="form-field">Short Description
                   <textarea name="shortDescription" required rows={2} placeholder="A brief summary of what this course offers..." className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-lani-green focus:outline-none focus:ring-1 focus:ring-lani-green resize-y"></textarea>
                 </label>
@@ -560,19 +596,21 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
               <label className="form-field">Type<select name="assetType"><option value="Banner">Banner</option><option value="Flyer">Flyer</option><option value="Brochure">Brochure</option><option value="Video">Video</option><option value="Testimonial">Testimonial</option></select></label>
               <label className="form-field">Placement<input name="placement" required placeholder="e.g. Homepage Hero"/></label>
               <label className="form-field">Owner<input name="owner" defaultValue="Content Manager"/></label>
-              <label className="form-field sm:col-span-2">Status<select name="status"><option value="Draft">Draft</option><option value="Scheduled">Scheduled</option><option value="Published">Published</option></select></label>
+              <label className="form-field">Status<select name="status"><option value="Draft">Draft</option><option value="Scheduled">Scheduled</option><option value="Published">Published</option></select></label>
+              <label className="form-field">Upload File<input name="assetFile" type="file" accept="image/*,application/pdf,video/*,.ppt,.pptx,.doc,.docx"/></label>
             </div>
-            <button type="submit" disabled={addingAsset} className="btn-primary w-full justify-center text-xs"><Upload size={14}/>{addingAsset?"Adding...":"Register Asset"}</button>
+            <button type="submit" disabled={addingAsset} className="btn-primary w-full justify-center text-xs"><Upload size={14}/>{addingAsset?"Uploading...":"Register Asset"}</button>
           </form>
           <div className="table-shell border border-slate-200">
             {assets.length > 0 ? (
               <table>
-                <thead><tr><th>Asset</th><th>Placement</th><th>Status</th></tr></thead>
+                <thead><tr><th>Asset</th><th>Placement</th><th>File</th><th>Status</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {assets.map(a => (
                     <tr key={a.id}>
                       <td><strong>{a.name}</strong><span>{a.type} ({a.owner})</span></td>
                       <td>{a.placement}</td>
+                      <td>{a.url ? <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-lani-blue hover:underline inline-flex items-center gap-1"><Eye size={12}/>View</a> : <span className="text-[10px] text-slate-400">—</span>}</td>
                       <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${a.status==="Published"?"bg-lani-emerald/15 text-lani-green":"bg-slate-100 text-slate-500"}`}>{a.status}</span></td>
                     </tr>
                   ))}

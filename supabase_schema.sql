@@ -484,7 +484,44 @@ CREATE POLICY "Admins can manage facilitator assignments" ON public.facilitator_
 
 
 -- ============================================================
--- 19. Secure role assignment (prevents privilege escalation)
+-- 19. Media storage (creative assets, brochures, materials)
+-- ============================================================
+-- Public "media" bucket + access policies, and a url column on cms_assets.
+ALTER TABLE public.cms_assets ADD COLUMN IF NOT EXISTS url TEXT;
+
+-- Course intro video + downloadable material files
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS video_url TEXT;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS material_files JSONB DEFAULT '[]';
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('media', 'media', true)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Public read media" ON storage.objects;
+CREATE POLICY "Public read media" ON storage.objects
+  FOR SELECT USING (bucket_id = 'media');
+
+DROP POLICY IF EXISTS "Authenticated upload media" ON storage.objects;
+CREATE POLICY "Authenticated upload media" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (bucket_id = 'media');
+
+DROP POLICY IF EXISTS "Authenticated update media" ON storage.objects;
+CREATE POLICY "Authenticated update media" ON storage.objects
+  FOR UPDATE TO authenticated USING (bucket_id = 'media');
+
+DROP POLICY IF EXISTS "Admins delete media" ON storage.objects;
+CREATE POLICY "Admins delete media" ON storage.objects
+  FOR DELETE TO authenticated USING (
+    bucket_id = 'media'
+    AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE public.profiles.id = auth.uid()
+        AND public.profiles.role IN ('admin', 'super_admin')
+    )
+  );
+
+-- ============================================================
+-- 20. Secure role assignment (prevents privilege escalation)
 -- ============================================================
 -- LANI Academy — Secure role assignment
 -- Prevents privilege escalation: a signed-in API user may self-select the

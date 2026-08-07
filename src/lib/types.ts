@@ -13,7 +13,8 @@ export type View =
   | "about"
   | "certification"
   | "resources"
-  | "contact";
+  | "contact"
+  | "calendar";
 
 export type DeliveryMode =
   | "Self-paced"
@@ -70,6 +71,8 @@ export type Course = {
   seats: number;
   enrolled: number;
   featured: boolean;
+  videoUrl?: string;
+  materialFiles?: { name: string; url: string }[];
 };
 
 export type Enrollment = {
@@ -149,6 +152,7 @@ export type CmsAsset = {
   placement: string;
   owner: string;
   status: "Draft" | "Scheduled" | "Published";
+  url?: string;
 };
 
 // ─── New LMS Types ───────────────────────────────────────────
@@ -236,6 +240,7 @@ export type Notification = {
   body: string;
   read: boolean;
   createdAt: string;
+  learnerEmail?: string;
 };
 
 export type FacilitatorAssignment = {

@@ -18,6 +18,9 @@ export default function CertificateModal({
     window.print();
   };
 
+  const verifyUrl = `${window.location.origin}/verify?id=${encodeURIComponent(certificate.id)}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(verifyUrl)}`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm print:p-0 print:bg-white">
       <div className="relative w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 print:shadow-none print:border-0 print:rounded-none">
@@ -34,7 +37,7 @@ export default function CertificateModal({
               className="inline-flex items-center gap-2 rounded-lg bg-lani-green px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-lani-emerald"
             >
               <Printer size={13} />
-              Print Certificate
+              Download PDF
             </button>
             <button
               onClick={onClose}
@@ -114,8 +117,13 @@ export default function CertificateModal({
                   </div>
                 </div>
 
-                {/* Verification ID / QR Click */}
+                {/* Verification QR + ID */}
                 <div className="text-center space-y-2">
+                  <img
+                    src={qrSrc}
+                    alt="Scan to verify certificate"
+                    className="mx-auto h-20 w-20 rounded bg-white p-1 ring-1 ring-slate-200"
+                  />
                   <button
                     onClick={() => {
                       onVerifyLink(certificate.id);
@@ -123,10 +131,10 @@ export default function CertificateModal({
                     }}
                     className="inline-block rounded bg-lani-navy hover:bg-lani-green text-white text-[10px] font-bold px-3 py-1.5 shadow-sm transition-all print:hidden"
                   >
-                    Click to Verify Online
+                    Verify Online
                   </button>
                   <div className="text-[10px] text-slate-400 font-medium">
-                    ID: <strong className="text-lani-navy select-all">{certificate.id}</strong>
+                    Scan to verify · ID: <strong className="text-lani-navy select-all">{certificate.id}</strong>
                     <br />
                     Date: {formatDate(certificate.issueDate)}
                   </div>

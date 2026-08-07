@@ -14,10 +14,13 @@ export default function Verify({ certificates, initialQuery = "", onOpenCertific
   const [match, setMatch] = useState<Certificate | null>(null);
 
   useEffect(() => {
-    if (initialQuery) {
-      setQuery(initialQuery);
+    // Accept a certificate id from the app state OR from a scanned QR link (?id=)
+    const params = new URLSearchParams(window.location.search);
+    const q = initialQuery || params.get("id") || "";
+    if (q) {
+      setQuery(q);
       const m = certificates.find(
-        (cert) => cert.id.toLowerCase() === initialQuery.trim().toLowerCase()
+        (cert) => cert.id.toLowerCase() === q.trim().toLowerCase()
       );
       setMatch(m || null);
     }

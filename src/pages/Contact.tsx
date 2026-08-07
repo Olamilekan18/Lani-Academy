@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { MapPin, Mail, Phone, Clock, CheckCircle, Loader2, Send } from "lucide-react";
-import { dbSaveLead } from "../lib/db";
+import { dbSaveLead, dbSendEmail } from "../lib/db";
+import { corporateLeadAckEmail } from "../lib/emailTemplates";
 import type { DeliveryMode } from "../lib/types";
 
 export default function Contact() {
@@ -31,6 +32,8 @@ export default function Contact() {
     try {
       const ok = await dbSaveLead(leadData);
       if (ok) {
+        const ack = corporateLeadAckEmail(leadData.contactName, leadData.organisation);
+        void dbSendEmail(leadData.email, ack.subject, ack.html);
         setSubmitted(true);
         e.currentTarget.reset();
       } else {

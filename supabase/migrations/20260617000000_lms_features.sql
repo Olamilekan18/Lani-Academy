@@ -1,3 +1,6 @@
+-- Required for gen_random_bytes() default IDs below
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- 11. Quizzes Table
 CREATE TABLE IF NOT EXISTS public.quizzes (
     id TEXT PRIMARY KEY DEFAULT 'quiz-' || encode(gen_random_bytes(6), 'hex'),
@@ -12,7 +15,9 @@ CREATE TABLE IF NOT EXISTS public.quizzes (
 );
 
 ALTER TABLE public.quizzes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Quizzes are viewable by enrolled learners" ON public.quizzes;
 CREATE POLICY "Quizzes are viewable by enrolled learners" ON public.quizzes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admins and facilitators can manage quizzes" ON public.quizzes;
 CREATE POLICY "Admins and facilitators can manage quizzes" ON public.quizzes FOR ALL USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin', 'facilitator'))
 );
@@ -30,8 +35,11 @@ CREATE TABLE IF NOT EXISTS public.quiz_attempts (
 );
 
 ALTER TABLE public.quiz_attempts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Learners can view their own attempts" ON public.quiz_attempts;
 CREATE POLICY "Learners can view their own attempts" ON public.quiz_attempts FOR SELECT USING (auth.email() = learner_email);
+DROP POLICY IF EXISTS "Learners can insert attempts" ON public.quiz_attempts;
 CREATE POLICY "Learners can insert attempts" ON public.quiz_attempts FOR INSERT WITH CHECK (auth.email() = learner_email OR auth.uid() IS NULL);
+DROP POLICY IF EXISTS "Admins and facilitators can view all attempts" ON public.quiz_attempts;
 CREATE POLICY "Admins and facilitators can view all attempts" ON public.quiz_attempts FOR SELECT USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin', 'facilitator'))
 );
@@ -48,7 +56,9 @@ CREATE TABLE IF NOT EXISTS public.assignments (
 );
 
 ALTER TABLE public.assignments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Assignments are viewable by everyone" ON public.assignments;
 CREATE POLICY "Assignments are viewable by everyone" ON public.assignments FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admins and facilitators can manage assignments" ON public.assignments;
 CREATE POLICY "Admins and facilitators can manage assignments" ON public.assignments FOR ALL USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin', 'facilitator'))
 );
@@ -68,11 +78,15 @@ CREATE TABLE IF NOT EXISTS public.assignment_submissions (
 );
 
 ALTER TABLE public.assignment_submissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Learners can view their own submissions" ON public.assignment_submissions;
 CREATE POLICY "Learners can view their own submissions" ON public.assignment_submissions FOR SELECT USING (auth.email() = learner_email);
+DROP POLICY IF EXISTS "Learners can insert submissions" ON public.assignment_submissions;
 CREATE POLICY "Learners can insert submissions" ON public.assignment_submissions FOR INSERT WITH CHECK (auth.email() = learner_email OR auth.uid() IS NULL);
+DROP POLICY IF EXISTS "Admins and facilitators can update submissions" ON public.assignment_submissions;
 CREATE POLICY "Admins and facilitators can update submissions" ON public.assignment_submissions FOR UPDATE USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin', 'facilitator'))
 );
+DROP POLICY IF EXISTS "Admins and facilitators can view submissions" ON public.assignment_submissions;
 CREATE POLICY "Admins and facilitators can view submissions" ON public.assignment_submissions FOR SELECT USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin', 'facilitator'))
 );
@@ -90,7 +104,9 @@ CREATE TABLE IF NOT EXISTS public.announcements (
 );
 
 ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Announcements are viewable by everyone" ON public.announcements;
 CREATE POLICY "Announcements are viewable by everyone" ON public.announcements FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admins and facilitators can manage announcements" ON public.announcements;
 CREATE POLICY "Admins and facilitators can manage announcements" ON public.announcements FOR ALL USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin', 'facilitator'))
 );
@@ -109,7 +125,9 @@ CREATE TABLE IF NOT EXISTS public.calendar_events (
 );
 
 ALTER TABLE public.calendar_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Calendar events are viewable by everyone" ON public.calendar_events;
 CREATE POLICY "Calendar events are viewable by everyone" ON public.calendar_events FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admins and facilitators can manage calendar events" ON public.calendar_events;
 CREATE POLICY "Admins and facilitators can manage calendar events" ON public.calendar_events FOR ALL USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin', 'facilitator'))
 );
@@ -126,8 +144,11 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 );
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view their notifications or broadcasts" ON public.notifications;
 CREATE POLICY "Users can view their notifications or broadcasts" ON public.notifications FOR SELECT USING (auth.email() = learner_email OR learner_email IS NULL);
+DROP POLICY IF EXISTS "Users can update their notifications" ON public.notifications;
 CREATE POLICY "Users can update their notifications" ON public.notifications FOR UPDATE USING (auth.email() = learner_email);
+DROP POLICY IF EXISTS "Admins can manage notifications" ON public.notifications;
 CREATE POLICY "Admins can manage notifications" ON public.notifications FOR ALL USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin'))
 );
@@ -143,7 +164,9 @@ CREATE TABLE IF NOT EXISTS public.facilitator_assignments (
 );
 
 ALTER TABLE public.facilitator_assignments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Facilitator assignments are viewable by everyone" ON public.facilitator_assignments;
 CREATE POLICY "Facilitator assignments are viewable by everyone" ON public.facilitator_assignments FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admins can manage facilitator assignments" ON public.facilitator_assignments;
 CREATE POLICY "Admins can manage facilitator assignments" ON public.facilitator_assignments FOR ALL USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin'))
 );

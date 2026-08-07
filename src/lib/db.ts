@@ -294,6 +294,44 @@ export async function dbGetAssets(): Promise<CmsAsset[]> {
   return toCamelCaseKeys(data) as CmsAsset[];
 }
 
+// Send a transactional email via the send-email Edge Function.
+// Fails silently (returns false) so email problems never block the app flow.
+export async function dbSendEmail(to: string, subject: string, html: string): Promise<boolean> {
+  if (!supabase || !to) return false;
+  try {
+    const { error } = await supabase.functions.invoke("send-email", {
+      body: { to, subject, html },
+    });
+    if (error) {
+      console.warn("Email not sent:", error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn("Email function unavailable:", e);
+    return false;
+  }
+}
+
+// Upload a file to the public "media" storage bucket and return its public URL.
+export async function dbUploadFile(file: File, folder = "assets"): Promise<string | null> {
+  if (!supabase) return null;
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 40);
+  const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
+  const { error } = await supabase.storage.from("media").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: file.type || undefined,
+  });
+  if (error) {
+    console.error("Error uploading file:", error.message);
+    return null;
+  }
+  const { data } = supabase.storage.from("media").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export async function dbSaveAsset(asset: CmsAsset): Promise<boolean> {
   if (!supabase) return false;
   const snakeAsset = toSnakeCaseKeys(asset);
@@ -344,6 +382,31 @@ export async function dbSaveQuizAttempt(attempt: QuizAttempt): Promise<boolean> 
   if (!supabase) return false;
   const { error } = await supabase.from("quiz_attempts").upsert(toSnakeCaseKeys(attempt));
   if (error) console.error("Error saving quiz attempt:", error.message);
+  return !error;
+}
+
+// Create or update a quiz (facilitators/admins). questions is stored as JSONB.
+export async function dbSaveQuiz(quiz: Quiz): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("quizzes").upsert(toSnakeCaseKeys(quiz));
+  if (error) console.error("Error saving quiz:", error.message);
+  return !error;
+}
+
+// Create or update an assignment (facilitators/admins).
+export async function dbSaveAssignment(assignment: Assignment): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("assignments").upsert(toSnakeCaseKeys(assignment));
+  if (error) console.error("Error saving assignment:", error.message);
+  return !error;
+}
+
+// Insert an in-app notification. Pass learnerEmail to target a specific
+// learner, or leave undefined for a broadcast.
+export async function dbSaveNotification(notification: Notification): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("notifications").insert(toSnakeCaseKeys(notification));
+  if (error) console.error("Error saving notification:", error.message);
   return !error;
 }
 

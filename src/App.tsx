@@ -19,7 +19,11 @@ import About from "./pages/About";
 import Certification from "./pages/Certification";
 import Resources from "./pages/Resources";
 import Contact from "./pages/Contact";
+import LearningCalendar from "./pages/LearningCalendar";
 
+import LoadingScreen from "./components/LoadingScreen";
+import TwoFactorModal from "./components/TwoFactorModal";
+import { TWO_FACTOR_ENABLED } from "./lib/twoFactor";
 import CheckoutModal from "./components/CheckoutModal";
 import CoursePlayer from "./components/CoursePlayer";
 import CertificateModal from "./components/CertificateModal";
@@ -57,8 +61,18 @@ import {
   dbSaveAnnouncement,
   dbSaveAssignmentSubmission,
   dbSaveQuizAttempt,
-  dbSaveFacilitatorAssignment
+  dbSaveQuiz,
+  dbSaveAssignment,
+  dbSaveNotification,
+  dbSaveFacilitatorAssignment,
+  dbSendEmail
 } from "./lib/db";
+import { formatMoney } from "./lib/utils";
+import {
+  paymentConfirmationEmail,
+  certificateReadyEmail,
+  applicationStatusEmail
+} from "./lib/emailTemplates";
 import type {
   View,
   Course,
@@ -81,7 +95,8 @@ import type {
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, signOut } = useAuth();
+  const [twoFactorPassed, setTwoFactorPassed] = useState(false);
 
   // Data lists loaded from database
   const [courses, setCourses] = useState<Course[]>([]);
@@ -205,6 +220,11 @@ export default function App() {
     loadDatabase();
   }, []);
 
+  // Reset the 2FA gate whenever the user signs out.
+  useEffect(() => {
+    if (!user) setTwoFactorPassed(false);
+  }, [user]);
+
   // Helper for components still using onNavigate
   const navigateToView = (view: View) => {
     if (view === "home") navigate("/");
@@ -219,6 +239,7 @@ export default function App() {
     else if (view === "certification") navigate("/certification");
     else if (view === "resources") navigate("/resources");
     else if (view === "contact") navigate("/contact");
+    else if (view === "calendar") navigate("/calendar");
   };
 
   // Wishlist toggle
@@ -273,7 +294,23 @@ export default function App() {
       await dbSaveEnrollment(enrollment);
       await dbSaveTransaction(transaction);
 
-      // 2. Refresh lists
+      // 2. Send confirmation email (no-op if email isn't configured)
+      const mail = paymentConfirmationEmail(
+        learnerName,
+        selectedCourse.title,
+        formatMoney(selectedCourse.price),
+        transaction.receiptNumber,
+        gateway === "Bank Transfer"
+      );
+      void dbSendEmail(learnerEmail, mail.subject, mail.html);
+      notify(
+        "payment",
+        gateway === "Bank Transfer" ? "Enrolment received" : "Payment successful",
+        `${selectedCourse.title} — ${formatMoney(selectedCourse.price)}`,
+        learnerEmail
+      );
+
+      // 3. Refresh lists
       await loadDatabase();
     } catch (err) {
       console.error(err);
@@ -294,16 +331,23 @@ export default function App() {
       const alreadyHasCert = certificates.some((c) => c.courseId === course.id);
       if (progress === 100 && !alreadyHasCert) {
         const certId = "LANI-CERT-" + Math.floor(1000 + Math.random() * 9000);
+        const learnerEmail = profile?.email || user?.email || "learner@lani.academy";
+        const learnerName = profile?.full_name || "Learner";
         const cert: Certificate = {
           id: certId,
           courseId: course.id,
           courseTitle: course.title,
-          learnerEmail: "learner@lani.academy",
-          learnerName: "Learner (Demo)",
+          learnerEmail,
+          learnerName,
           issueDate: new Date().toISOString().split("T")[0],
           status: "Issued",
         };
         await dbSaveCertificate(cert);
+
+        // Notify the learner their certificate is ready (no-op if email unconfigured)
+        const mail = certificateReadyEmail(learnerName, course.title, certId);
+        void dbSendEmail(learnerEmail, mail.subject, mail.html);
+        notify("certificate", "Certificate issued", `Your certificate for ${course.title} is ready.`, learnerEmail);
       }
 
       // 3. Refresh lists
@@ -331,6 +375,11 @@ export default function App() {
   const handleUpdateAppStatus = async (id: string, status: ProgrammeApplication["status"]) => {
     try {
       await dbUpdateApplicationStatus(id, status);
+      const app = applications.find((a) => a.id === id);
+      if (app?.email) {
+        const mail = applicationStatusEmail(app.applicantName, app.programmeType, status);
+        void dbSendEmail(app.email, mail.subject, mail.html);
+      }
       await loadDatabase();
     } catch (err) {
       console.error(err);
@@ -385,6 +434,10 @@ export default function App() {
   const handlePostAnnouncement = async (a: Omit<Announcement, "id"|"createdAt">) => {
     const newAnn: Announcement = { ...a, id: "ann-" + Date.now().toString(), createdAt: new Date().toISOString() };
     await dbSaveAnnouncement(newAnn);
+    // Notify every learner enrolled in the announced course
+    enrollments
+      .filter((e) => e.courseId === a.courseId)
+      .forEach((e) => notify("announcement", a.title, `New announcement in ${a.courseTitle}`, e.learnerEmail));
     await loadDatabase();
   };
 
@@ -396,20 +449,82 @@ export default function App() {
     }
   };
 
-  const handleTakeQuiz = async (q: Quiz) => {
+  const handleTakeQuiz = async (q: Quiz, answers: number[], score: number, passed: boolean) => {
+    const learnerEmail = profile?.email || user?.email || "learner@lani.academy";
+    const learnerName = profile?.full_name || "Learner";
     const attempt: QuizAttempt = {
       id: "qatt-" + Date.now().toString(),
       quizId: q.id,
-      learnerEmail: "learner@lani.academy",
-      learnerName: "Learner (Demo)",
-      answers: [],
-      score: 100, // mock taking
-      passed: true,
+      learnerEmail,
+      learnerName,
+      answers,
+      score,
+      passed,
       submittedAt: new Date().toISOString()
     };
     await dbSaveQuizAttempt(attempt);
     await loadDatabase();
-    toast.success(`Mock Quiz Completed and Saved: ${q.title}`);
+    if (passed) toast.success(`Quiz passed — ${score}%`);
+    else toast(`Quiz submitted — ${score}% (pass mark ${q.passingScore}%)`);
+  };
+
+  const handleSaveQuiz = async (quiz: Quiz) => {
+    const ok = await dbSaveQuiz(quiz);
+    await loadDatabase();
+    if (ok) toast.success(`Quiz "${quiz.title}" published`);
+    else toast.error("Could not save quiz.");
+  };
+
+  const handleSaveAssignment = async (assignment: Assignment) => {
+    const ok = await dbSaveAssignment(assignment);
+    await loadDatabase();
+    if (ok) toast.success(`Assignment "${assignment.title}" published`);
+    else toast.error("Could not save assignment.");
+  };
+
+  // Fire-and-forget in-app notification (targeted to a learner, or broadcast).
+  const notify = (
+    type: Notification["type"],
+    title: string,
+    body: string,
+    learnerEmail?: string
+  ) => {
+    const n: Notification = {
+      id: "notif-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      type,
+      title,
+      body,
+      read: false,
+      createdAt: new Date().toISOString(),
+      learnerEmail,
+    };
+    void dbSaveNotification(n);
+  };
+
+  const handleSubmitAssignment = async (
+    assignmentId: string,
+    courseId: string,
+    content: string,
+    fileUrl?: string
+  ) => {
+    const learnerEmail = profile?.email || user?.email || "";
+    const learnerName = profile?.full_name || "Learner";
+    const submission: AssignmentSubmission = {
+      id: "sub-" + Date.now().toString(36),
+      assignmentId,
+      courseId,
+      learnerEmail,
+      learnerName,
+      submittedAt: new Date().toISOString(),
+      content: fileUrl ? `${content}\n\nAttached file: ${fileUrl}` : content,
+      score: null,
+      feedback: "",
+      status: "Submitted",
+    };
+    const ok = await dbSaveAssignmentSubmission(submission);
+    await loadDatabase();
+    if (ok) toast.success("Assignment submitted");
+    else toast.error("Could not submit assignment.");
   };
 
   const handleUpdatePaymentStatus = async (id: string, status: Transaction["status"]) => {
@@ -438,19 +553,42 @@ export default function App() {
     if (path.startsWith("/certification")) return "certification";
     if (path.startsWith("/resources")) return "resources";
     if (path.startsWith("/contact")) return "contact";
+    if (path.startsWith("/calendar")) return "calendar";
     return "home";
+  };
+
+  // Map a role to the dashboard it is allowed to see.
+  const roleHome = (role?: string): string => {
+    if (role === "admin" || role === "super_admin") return "/admin";
+    if (role === "facilitator") return "/facilitator";
+    return "/learn";
+  };
+
+  // Guard a role-restricted dashboard route:
+  //  - signed out  → show that portal's login
+  //  - profile still resolving → show the loading screen (prevents mis-routing)
+  //  - wrong role  → redirect to the user's OWN dashboard
+  //  - correct role → render the dashboard
+  const guardDashboard = (
+    allowed: string[],
+    portalRole: "learner" | "facilitator" | "admin",
+    dashboard: React.ReactNode
+  ): React.ReactNode => {
+    if (!user) {
+      return <Login portalRole={portalRole} onNavigate={navigateToView} onSuccess={() => {}} />;
+    }
+    if (!profile) {
+      return <LoadingScreen message="Loading your profile…" />;
+    }
+    if (allowed.includes(profile.role)) {
+      return dashboard;
+    }
+    return <Navigate to={roleHome(profile.role)} replace />;
   };
 
   const renderRoutes = () => {
     if (loading || authLoading) {
-      return (
-        <div className="section min-h-[45rem] flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <div className="h-12 w-12 border-4 border-lani-green border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-sm font-bold text-slate-500">Connecting...</p>
-          </div>
-        </div>
-      );
+      return <LoadingScreen />;
     }
 
     if (connectionError && !offlineMode) {
@@ -524,8 +662,18 @@ export default function App() {
               course={selectedCourse}
               onBack={() => { setSelectedCourse(null); navigate("/courses"); }}
               onEnrol={() => {
-                if (!user || profile?.role !== "learner") {
-                  toast.error("Please sign in as a Learner to enable payments and progression.");
+                if (!user) {
+                  toast.error("Please sign in as a learner to enrol.");
+                  navigate("/learn");
+                  return;
+                }
+                if (profile?.role !== "learner") {
+                  toast.error("Switch to a learner account to enrol in courses.");
+                  return;
+                }
+                if (!user.email_confirmed_at) {
+                  toast.error("Please verify your email before enrolling — check your inbox for the confirmation link.");
+                  return;
                 }
                 setShowCheckout(true);
               }}
@@ -551,90 +699,72 @@ export default function App() {
         <Route path="/certification" element={<Certification onNavigate={navigateToView} />} />
         <Route path="/resources" element={<Resources onNavigate={navigateToView} />} />
         <Route path="/contact" element={<Contact />} />
-
-        <Route path="/learn" element={
-          !user ? (
-            <Login
-              portalRole="learner"
-              onNavigate={navigateToView}
-              onSuccess={() => {}}
-            />
-          ) : profile?.role === "learner" ? (
-            <LearnerDashboard
-              enrollments={enrollments}
-              courses={courses}
-              certificates={certificates}
-              transactions={transactions}
-              quizzes={quizzes}
-              quizAttempts={quizAttempts}
-              assignments={courseAssignments}
-              submissions={submissions}
-              announcements={announcements}
-              calendarEvents={calendarEvents}
-              notifications={notifications}
-              onOpenPlayer={(c, e) => setActivePlayer({ course: c, enrollment: e })}
-              onOpenCertificate={setActiveCertificate}
-              onTakeQuiz={handleTakeQuiz}
-            />
-          ) : (
-            <Navigate to={profile?.role === "admin" || profile?.role === "super_admin" ? "/admin" : "/facilitator"} replace />
-          )
+        <Route path="/calendar" element={
+          <LearningCalendar
+            courses={courses}
+            events={calendarEvents}
+            onOpenCourse={handleOpenCourse}
+            onNavigate={navigateToView}
+          />
         } />
 
-        <Route path="/facilitator" element={
-          !user ? (
-            <Login
-              portalRole="facilitator"
-              onNavigate={navigateToView}
-              onSuccess={() => {}}
-            />
-          ) : profile?.role === "facilitator" ? (
-            <FacilitatorDashboard
-              courses={courses}
-              enrollments={enrollments}
-              assignments={facilitatorAssignments}
-              courseAssignments={courseAssignments}
-              submissions={submissions}
-              announcements={announcements}
-              calendarEvents={calendarEvents}
-              quizAttempts={quizAttempts}
-              onPostAnnouncement={handlePostAnnouncement}
-              onGradeSubmission={handleGradeSubmission}
-            />
-          ) : (
-            <Navigate to={profile?.role === "admin" || profile?.role === "super_admin" ? "/admin" : "/learn"} replace />
-          )
-        } />
+        <Route path="/learn" element={guardDashboard(["learner"], "learner",
+          <LearnerDashboard
+            enrollments={enrollments}
+            courses={courses}
+            certificates={certificates}
+            transactions={transactions}
+            quizzes={quizzes}
+            quizAttempts={quizAttempts}
+            assignments={courseAssignments}
+            submissions={submissions}
+            announcements={announcements}
+            calendarEvents={calendarEvents}
+            notifications={notifications}
+            onOpenPlayer={(c, e) => setActivePlayer({ course: c, enrollment: e })}
+            onOpenCertificate={setActiveCertificate}
+            onTakeQuiz={handleTakeQuiz}
+            onSubmitAssignment={handleSubmitAssignment}
+          />
+        )} />
 
-        <Route path="/admin" element={
-          !user ? (
-            <Login
-              portalRole="admin"
-              onNavigate={navigateToView}
-              onSuccess={() => {}}
-            />
-          ) : (profile?.role === "admin" || profile?.role === "super_admin") ? (
-            <AdminDashboard
-              courses={courses}
-              enrollments={enrollments}
-              transactions={transactions}
-              certificates={certificates}
-              leads={leads}
-              applications={applications}
-              assets={assets}
-              facilitators={facilitators}
-              onUpdateLeadStage={handleUpdateLeadStage}
-              onUpdateAppStatus={handleUpdateAppStatus}
-              onAddAsset={handleAddAsset}
-              onAddCourse={handleAddCourse}
-              onAssignFacilitator={handleAssignFacilitator}
-              onRefreshData={loadDatabase}
-              onUpdatePaymentStatus={handleUpdatePaymentStatus}
-            />
-          ) : (
-            <Navigate to={profile?.role === "facilitator" ? "/facilitator" : "/learn"} replace />
-          )
-        } />
+        <Route path="/facilitator" element={guardDashboard(["facilitator"], "facilitator",
+          <FacilitatorDashboard
+            courses={courses}
+            enrollments={enrollments}
+            assignments={facilitatorAssignments}
+            courseAssignments={courseAssignments}
+            submissions={submissions}
+            announcements={announcements}
+            calendarEvents={calendarEvents}
+            quizzes={quizzes}
+            quizAttempts={quizAttempts}
+            onPostAnnouncement={handlePostAnnouncement}
+            onGradeSubmission={handleGradeSubmission}
+            onSaveQuiz={handleSaveQuiz}
+            onSaveAssignment={handleSaveAssignment}
+          />
+        )} />
+
+        <Route path="/admin" element={guardDashboard(["admin", "super_admin"], "admin",
+          <AdminDashboard
+            courses={courses}
+            enrollments={enrollments}
+            transactions={transactions}
+            certificates={certificates}
+            leads={leads}
+            applications={applications}
+            assets={assets}
+            facilitators={facilitators}
+            onUpdateLeadStage={handleUpdateLeadStage}
+            onUpdateAppStatus={handleUpdateAppStatus}
+            onAddAsset={handleAddAsset}
+            onAddCourse={handleAddCourse}
+            onAssignFacilitator={handleAssignFacilitator}
+            onRefreshData={loadDatabase}
+            onUpdatePaymentStatus={handleUpdatePaymentStatus}
+          />
+        )} />
 
         <Route path="/verify" element={
           <Verify
@@ -692,6 +822,16 @@ export default function App() {
           navigateToView(view);
         }}
       />
+
+      {/* Email 2FA gate (enabled via VITE_ENABLE_2FA; off by default) */}
+      {TWO_FACTOR_ENABLED && user && profile && !twoFactorPassed && (
+        <TwoFactorModal
+          email={profile.email || user.email || ""}
+          name={profile.full_name || "there"}
+          onVerified={() => setTwoFactorPassed(true)}
+          onCancel={async () => { await signOut(); setTwoFactorPassed(false); }}
+        />
+      )}
 
       {/* 1. Secure Card / Transfer Checkout Simulation Overlay */}
       {showCheckout && selectedCourse && (
