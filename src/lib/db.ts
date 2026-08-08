@@ -18,7 +18,8 @@ import type {
   FacilitatorAssignment,
   PromoCode,
   Survey,
-  SurveyResponse
+  SurveyResponse,
+  ContentItem
 } from "./types";
 import {
   mockQuizzes,
@@ -459,6 +460,27 @@ export async function dbAddWishlist(email: string, courseId: string): Promise<bo
 export async function dbRemoveWishlist(email: string, courseId: string): Promise<boolean> {
   if (!supabase || !email) return false;
   const { error } = await supabase.from("wishlists").delete().eq("learner_email", email).eq("course_id", courseId);
+  return !error;
+}
+
+// ── Content (articles + downloadable resources) ─────────────
+export async function dbGetContent(): Promise<ContentItem[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("content").select("*").order("created_at", { ascending: false });
+  return toCamelCaseKeys(data || []) as ContentItem[];
+}
+
+export async function dbSaveContent(item: Partial<ContentItem>): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("content").upsert(toSnakeCaseKeys(item));
+  if (error) console.error("Error saving content:", error.message);
+  return !error;
+}
+
+export async function dbDeleteContent(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("content").delete().eq("id", id);
+  if (error) console.error("Error deleting content:", error.message);
   return !error;
 }
 

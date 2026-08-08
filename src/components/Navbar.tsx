@@ -10,6 +10,7 @@ import {
   BadgeCheck,
   GraduationCap,
   Building2,
+  User as UserIcon,
 } from "lucide-react";
 import type { View } from "../lib/types";
 
@@ -159,6 +160,14 @@ export default function Navbar({ currentView, onNavigate }: NavbarProps) {
                         <DashIcon size={14} /> {dashboardLabel}
                       </button>
                     )}
+                    {userRole === "learner" && (
+                      <button
+                        onClick={() => { setProfileOpen(false); onNavigate("profile"); }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-lani-navy"
+                      >
+                        <UserIcon size={14} /> My profile
+                      </button>
+                    )}
                     <button
                       onClick={async () => { setProfileOpen(false); await signOut(); onNavigate("home"); }}
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-500 hover:bg-red-50"
@@ -210,7 +219,12 @@ export default function Navbar({ currentView, onNavigate }: NavbarProps) {
       {menuOpen && (
         <div className="space-y-4 border-t border-slate-100 bg-white px-4 py-4 md:hidden">
           <nav className="flex flex-col">
-            {[{ label: "Home", view: "home" as View }, ...navItems, ...mobileExtra].map((item) => (
+            {[
+              { label: "Home", view: "home" as View },
+              ...navItems,
+              ...mobileExtra,
+              ...(userRole === "learner" ? [{ label: "My Profile", view: "profile" as View }] : []),
+            ].map((item) => (
               <button
                 key={item.view}
                 onClick={() => { setMenuOpen(false); onNavigate(item.view); }}

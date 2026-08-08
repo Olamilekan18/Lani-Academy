@@ -4,8 +4,10 @@ import type { Course, Enrollment, Certificate, Transaction, Quiz, QuizAttempt, A
 import { formatMoney, formatDate } from "../lib/utils";
 import toast from "react-hot-toast";
 import QuizModal from "../components/QuizModal";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { dbUploadFile } from "../lib/db";
+import { supabase } from "../lib/supabase";
 
 type Tab = "overview"|"courses"|"schedule"|"assessments"|"certificates"|"transactions"|"profile";
 
@@ -25,18 +27,30 @@ interface Props {
   onOpenCertificate: (c: Certificate) => void;
   surveys: Survey[];
   surveyResponses: SurveyResponse[];
+  wishlist: string[];
+  onToggleWishlist: (courseId: string) => void;
+  onOpenCourse: (course: Course) => void;
   onTakeQuiz: (q: Quiz, answers: number[], score: number, passed: boolean) => Promise<void> | void;
   onSubmitAssignment: (assignmentId: string, courseId: string, content: string, fileUrl?: string) => Promise<void> | void;
   onSubmitSurvey: (survey: Survey, ratings: number[], comment: string) => Promise<void> | void;
 }
 
-export default function LearnerDashboard({ enrollments, courses, certificates, transactions, quizzes, quizAttempts, assignments, submissions, announcements, calendarEvents, notifications, surveys, surveyResponses, onOpenPlayer, onOpenCertificate, onTakeQuiz, onSubmitAssignment, onSubmitSurvey }: Props) {
-  const { profile, user } = useAuth();
+export default function LearnerDashboard({ enrollments, courses, certificates, transactions, quizzes, quizAttempts, assignments, submissions, announcements, calendarEvents, notifications, surveys, surveyResponses, wishlist, onToggleWishlist, onOpenCourse, onOpenPlayer, onOpenCertificate, onTakeQuiz, onSubmitAssignment, onSubmitSurvey }: Props) {
+  const { profile, user, updateProfile } = useAuth();
   const myEmail = profile?.email || user?.email || "";
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-learner-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
   useEffect(() => { try { localStorage.setItem("lani-learner-tab", tab); } catch { /* ignore */ } }, [tab]);
+
+  // Allow deep-linking to a tab via ?tab= (e.g. the navbar "My profile" link).
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    const valid: Tab[] = ["overview", "courses", "schedule", "assessments", "certificates", "transactions", "profile"];
+    if (t && (valid as string[]).includes(t)) setTab(t as Tab);
+  }, [searchParams]);
+
   const [notifOpen, setNotifOpen] = useState(false);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [submitFor, setSubmitFor] = useState<string | null>(null);
@@ -63,6 +77,41 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
     setSvBusy(false);
     setOpenSurvey(null);
   };
+
+  // Profile editing
+  const [pName, setPName] = useState(profile?.full_name || "");
+  const [pPhone, setPPhone] = useState(profile?.phone || "");
+  const [pOrg, setPOrg] = useState(profile?.organisation || "");
+  const [pJob, setPJob] = useState(profile?.job_title || "");
+  const [pBio, setPBio] = useState(profile?.bio || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
+  const [savingPass, setSavingPass] = useState(false);
+
+  const saveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingProfile(true);
+    const { error } = await updateProfile({ full_name: pName, phone: pPhone, organisation: pOrg, job_title: pJob, bio: pBio });
+    setSavingProfile(false);
+    if (error) toast.error(error); else toast.success("Profile updated");
+  };
+
+  const changePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPass.length < 6) { toast.error("Password must be at least 6 characters."); return; }
+    if (newPass !== confirmPass) { toast.error("Passwords do not match."); return; }
+    if (!supabase) { toast.error("Not connected."); return; }
+    setSavingPass(true);
+    const { error } = await supabase.auth.updateUser({ password: newPass });
+    setSavingPass(false);
+    if (error) toast.error(error.message);
+    else { toast.success("Password changed"); setNewPass(""); setConfirmPass(""); }
+  };
+
+  const savedCourses = courses.filter((c) => wishlist.includes(c.id));
+  const initials = (profile?.full_name || myEmail || "L").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+  const memberSince = user?.created_at ? formatDate(user.created_at) : "—";
 
   const handleAssignmentSubmit = async (a: Assignment) => {
     if (!subContent.trim()) { toast.error("Add your submission text."); return; }
@@ -473,24 +522,71 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
 
       {/* PROFILE TAB */}
       {tab === "profile" && (
-        <div className="max-w-2xl mx-auto">
-          <div className="rounded-xl border border-slate-200 p-6 space-y-6">
-            <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
-              <div className="h-16 w-16 rounded-full bg-lani-green text-white flex items-center justify-center text-xl font-bold">AO</div>
-              <div>
-                <h3 className="text-lg font-bold text-lani-navy">Adewale Okonkwo</h3>
-                <p className="text-xs text-slate-500">learner@lani.academy • Learner</p>
+        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-6">
+            {/* Identity + edit */}
+            <div className="rounded-xl border border-slate-200 p-6 space-y-6">
+              <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-lani-green to-lani-emerald text-xl font-bold text-white">{initials}</div>
+                <div>
+                  <h3 className="text-lg font-bold text-lani-navy">{profile?.full_name || "Learner"}</h3>
+                  <p className="text-xs text-slate-500">{myEmail} • {profile?.role || "learner"}</p>
+                </div>
               </div>
+              <form className="grid gap-4 sm:grid-cols-2" onSubmit={saveProfile}>
+                <label className="form-field">Full Name<input value={pName} onChange={e => setPName(e.target.value)} required/></label>
+                <label className="form-field">Email<input value={myEmail} disabled className="!bg-slate-50"/></label>
+                <label className="form-field">Phone<input value={pPhone} onChange={e => setPPhone(e.target.value)} placeholder="+234..."/></label>
+                <label className="form-field">Organisation<input value={pOrg} onChange={e => setPOrg(e.target.value)} placeholder="Company / institution"/></label>
+                <label className="form-field">Job Title<input value={pJob} onChange={e => setPJob(e.target.value)} placeholder="Your role"/></label>
+                <label className="form-field">Location<input placeholder="City, Country"/></label>
+                <label className="form-field sm:col-span-2">Short bio<textarea value={pBio} onChange={e => setPBio(e.target.value)} rows={3} placeholder="Tell us a little about yourself"/></label>
+                <div className="sm:col-span-2"><button type="submit" disabled={savingProfile} className="btn-primary text-xs px-6">{savingProfile ? "Saving..." : "Save changes"}</button></div>
+              </form>
             </div>
-            <form className="grid gap-4 sm:grid-cols-2" onSubmit={e => {e.preventDefault(); toast.success("Profile updated (demo)");}}>
-              <label className="form-field">Full Name<input defaultValue="Adewale Okonkwo"/></label>
-              <label className="form-field">Email<input defaultValue="learner@lani.academy" disabled className="!bg-slate-50"/></label>
-              <label className="form-field">Phone<input defaultValue="+234 812 345 6789"/></label>
-              <label className="form-field">Organisation<input defaultValue="Apex Bank Plc"/></label>
-              <label className="form-field">Job Title<input defaultValue="Senior Digital Analyst"/></label>
-              <label className="form-field">Location<input defaultValue="Lagos, Nigeria"/></label>
-              <div className="sm:col-span-2 pt-2"><button type="submit" className="btn-primary text-xs px-6">Save Changes</button></div>
-            </form>
+
+            {/* Password */}
+            <div className="rounded-xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-sm font-bold text-lani-navy flex items-center gap-2"><ShieldCheck size={15} className="text-lani-green"/>Security</h3>
+              <form className="grid gap-4 sm:grid-cols-2" onSubmit={changePassword}>
+                <label className="form-field">New password<input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="At least 6 characters"/></label>
+                <label className="form-field">Confirm password<input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Re-enter password"/></label>
+                <div className="sm:col-span-2"><button type="submit" disabled={savingPass} className="btn-secondary text-xs px-6">{savingPass ? "Updating..." : "Change password"}</button></div>
+              </form>
+            </div>
+          </div>
+
+          {/* Sidebar: account + saved courses */}
+          <div className="space-y-6">
+            <div className="rounded-xl border border-slate-200 p-6">
+              <h3 className="text-sm font-bold text-lani-navy mb-4">Account</h3>
+              <dl className="grid gap-3 text-xs">
+                <div className="flex justify-between"><dt className="text-slate-400">Role</dt><dd className="font-bold text-lani-navy capitalize">{profile?.role || "learner"}</dd></div>
+                <div className="flex justify-between"><dt className="text-slate-400">Member since</dt><dd className="font-bold text-lani-navy">{memberSince}</dd></div>
+                <div className="flex justify-between"><dt className="text-slate-400">Active courses</dt><dd className="font-bold text-lani-navy">{programs.length}</dd></div>
+                <div className="flex justify-between"><dt className="text-slate-400">Certificates</dt><dd className="font-bold text-lani-navy">{certificates.length}</dd></div>
+              </dl>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 p-6">
+              <h3 className="text-sm font-bold text-lani-navy mb-4">Saved courses ({savedCourses.length})</h3>
+              {savedCourses.length > 0 ? (
+                <div className="grid gap-3">
+                  {savedCourses.map(c => (
+                    <div key={c.id} className="flex items-center gap-3">
+                      <img src={c.image} alt="" className="h-10 w-10 rounded-lg object-cover bg-slate-100 shrink-0"/>
+                      <button onClick={() => onOpenCourse(c)} className="flex-1 min-w-0 text-left">
+                        <p className="truncate text-xs font-bold text-lani-navy hover:text-lani-green">{c.title}</p>
+                        <p className="text-[10px] text-slate-400">{formatMoney(c.price)}</p>
+                      </button>
+                      <button onClick={() => onToggleWishlist(c.id)} className="text-[10px] font-bold text-red-500 hover:underline shrink-0">Remove</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="py-6 text-center text-xs text-slate-400">No saved courses yet. Tap the heart on any course to save it.</p>
+              )}
+            </div>
           </div>
         </div>
       )}

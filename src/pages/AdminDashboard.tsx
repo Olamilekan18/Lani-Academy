@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode } from "../lib/types";
+import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { seedDatabase, dbUploadFile } from "../lib/db";
 import toast from "react-hot-toast";
 
-type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"promos"|"broadcast";
+type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"content"|"promos"|"broadcast";
 
 interface Props {
   courses: Course[];
@@ -19,8 +19,11 @@ interface Props {
   facilitators: {fullName: string, email: string}[];
   promos: PromoCode[];
   subscribers: string[];
+  content: ContentItem[];
   onSavePromo: (p: Partial<PromoCode>) => Promise<void> | void;
   onBroadcast: (emails: string[], subject: string, message: string) => Promise<void> | void;
+  onSaveContent: (i: Partial<ContentItem>) => Promise<void> | void;
+  onDeleteContent: (id: string) => Promise<void> | void;
   onUpdateLeadStage: (id: string, stage: CorporateLead["stage"]) => Promise<void>;
   onUpdateAppStatus: (id: string, status: ProgrammeApplication["status"]) => Promise<void>;
   onAddAsset: (d: any) => Promise<void>;
@@ -32,7 +35,7 @@ interface Props {
 
 const COLORS = ["#087443","#0b66c3","#c9972b","#d95845","#10a768","#6366f1","#ec4899","#14b8a6"];
 
-export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, onSavePromo, onBroadcast, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
+export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, content, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-admin-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
@@ -210,6 +213,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     {key:"applications",label:"Applications",icon:ClipboardCheck,count:applications.length},
     {key:"certificates",label:"Certificates",icon:Award,count:certificates.length},
     {key:"cms",label:"CMS Assets",icon:FileText,count:assets.length},
+    {key:"content",label:"Articles & Resources",icon:Edit,count:content.length},
     {key:"promos",label:"Promo Codes",icon:Tag,count:promos.length},
     {key:"broadcast",label:"Broadcast",icon:Send},
   ];
@@ -240,6 +244,36 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     await onBroadcast(bcRecipients(), bcSubject.trim(), bcMessage.trim());
     setBcBusy(false);
     setBcSubject(""); setBcMessage("");
+  };
+
+  const [savingContent, setSavingContent] = useState(false);
+  const handleSaveContentSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    setSavingContent(true);
+    try {
+      const coverFile = fd.get("cover") as File | null;
+      const docFile = fd.get("file") as File | null;
+      let imageUrl = "";
+      let fileUrl = "";
+      if (coverFile && coverFile.size > 0) imageUrl = (await dbUploadFile(coverFile, "content")) || "";
+      if (docFile && docFile.size > 0) fileUrl = (await dbUploadFile(docFile, "content")) || "";
+      await onSaveContent({
+        id: "cnt-" + Date.now().toString(36),
+        type: fd.get("type") as ContentItem["type"],
+        title: fd.get("title") as string,
+        category: (fd.get("category") as string) || "",
+        excerpt: (fd.get("excerpt") as string) || "",
+        body: (fd.get("body") as string) || "",
+        author: (fd.get("author") as string) || "LANI Academy",
+        imageUrl,
+        fileUrl,
+        published: fd.get("published") === "on",
+      });
+      form.reset();
+    } catch (err) { console.error(err); }
+    setSavingContent(false);
   };
 
   const handleSavePromoSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -670,6 +704,54 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                 </tbody>
               </table>
             ) : <div className="py-16 text-center"><FileText className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No Assets</h3></div>}
+          </div>
+        </div>
+      )}
+
+      {/* CONTENT */}
+      {tab === "content" && (
+        <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+          <form className="form-panel border border-slate-200" onSubmit={handleSaveContentSubmit}>
+            <div><span className="eyebrow">Publish</span><h2 className="mt-3 text-lg font-bold text-lani-navy">Add Article or Resource</h2></div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="form-field">Type
+                <select name="type" defaultValue="Article">
+                  <option value="Article">Article</option>
+                  <option value="Guide">Guide (download)</option>
+                  <option value="Brochure">Brochure (download)</option>
+                  <option value="Flyer">Flyer (download)</option>
+                </select>
+              </label>
+              <label className="form-field">Category<input name="category" placeholder="e.g. Human Capital"/></label>
+              <label className="form-field sm:col-span-2">Title<input name="title" required placeholder="Article or resource title"/></label>
+              <label className="form-field sm:col-span-2">Excerpt / summary<input name="excerpt" placeholder="One-line summary"/></label>
+              <label className="form-field sm:col-span-2">Body (articles only)<textarea name="body" rows={5} placeholder="Full article text. Line breaks are preserved."/></label>
+              <label className="form-field">Cover image<input name="cover" type="file" accept="image/*"/></label>
+              <label className="form-field">Downloadable file<input name="file" type="file" accept="application/pdf,.doc,.docx,.ppt,.pptx"/></label>
+              <label className="form-field">Author<input name="author" defaultValue="LANI Academy"/></label>
+              <label className="form-field flex-row items-center gap-2 mt-6"><input name="published" type="checkbox" defaultChecked className="h-4 w-4 accent-lani-green"/> Published</label>
+            </div>
+            <button type="submit" disabled={savingContent} className="btn-primary w-full justify-center text-xs"><Upload size={14}/>{savingContent ? "Saving..." : "Publish Content"}</button>
+          </form>
+          <div className="table-shell border border-slate-200">
+            {content.length > 0 ? (
+              <table>
+                <thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {content.map(c => (
+                    <tr key={c.id}>
+                      <td><strong>{c.title}</strong><span>{c.category} • {c.author}</span></td>
+                      <td className="text-xs">{c.type}</td>
+                      <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${c.published?"bg-lani-emerald/15 text-lani-green":"bg-slate-100 text-slate-500"}`}>{c.published?"Published":"Draft"}</span></td>
+                      <td className="flex items-center gap-2">
+                        {c.fileUrl && <a href={c.fileUrl} target="_blank" rel="noopener noreferrer" className="text-lani-blue hover:underline"><Eye size={14}/></a>}
+                        <button onClick={() => onDeleteContent(c.id)} className="text-red-500 hover:text-red-600"><Trash2 size={14}/></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <div className="py-16 text-center"><Edit className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No content yet</h3></div>}
           </div>
         </div>
       )}

@@ -76,7 +76,10 @@ import {
   dbSaveSurvey,
   dbGetSurveyResponses,
   dbSaveSurveyResponse,
-  dbGetNewsletterSubscribers
+  dbGetNewsletterSubscribers,
+  dbGetContent,
+  dbSaveContent,
+  dbDeleteContent
 } from "./lib/db";
 import { formatMoney } from "./lib/utils";
 import { applySeo } from "./lib/seo";
@@ -106,7 +109,8 @@ import type {
   FacilitatorAssignment,
   PromoCode,
   Survey,
-  SurveyResponse
+  SurveyResponse,
+  ContentItem
 } from "./lib/types";
 
 export default function App() {
@@ -128,6 +132,7 @@ export default function App() {
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [surveyResponses, setSurveyResponses] = useState<SurveyResponse[]>([]);
   const [subscribers, setSubscribers] = useState<string[]>([]);
+  const [content, setContent] = useState<ContentItem[]>([]);
 
   // Mock data states for LMS features not yet in Supabase
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -195,16 +200,18 @@ export default function App() {
       const dbAssets = await dbGetAssets();
       setAssets(dbAssets);
 
-      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers] = await Promise.all([
+      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers, dbContent] = await Promise.all([
         dbGetPromos(),
         dbGetSurveys(),
         dbGetSurveyResponses(),
         dbGetNewsletterSubscribers(),
+        dbGetContent(),
       ]);
       setPromos(dbPromos);
       setSurveys(dbSurveys);
       setSurveyResponses(dbSurveyResponses);
       setSubscribers(dbSubscribers);
+      setContent(dbContent);
 
       // Load extended LMS features from Supabase
       const [
@@ -286,6 +293,7 @@ export default function App() {
     else if (view === "resources") navigate("/resources");
     else if (view === "contact") navigate("/contact");
     else if (view === "calendar") navigate("/calendar");
+    else if (view === "profile") navigate("/learn?tab=profile");
   };
 
   // Wishlist toggle — persists for signed-in learners, in-memory otherwise
@@ -552,6 +560,20 @@ export default function App() {
     else toast(`Queued for ${unique.length} recipient(s). Connect Resend to deliver.`);
   };
 
+  const handleSaveContent = async (item: Partial<ContentItem>) => {
+    const ok = await dbSaveContent(item);
+    await loadDatabase();
+    if (ok) toast.success("Content saved");
+    else toast.error("Could not save content.");
+  };
+
+  const handleDeleteContent = async (id: string) => {
+    const ok = await dbDeleteContent(id);
+    await loadDatabase();
+    if (ok) toast.success("Content deleted");
+    else toast.error("Could not delete content.");
+  };
+
   const handleSavePromo = async (promo: Partial<PromoCode>) => {
     const ok = await dbSavePromo(promo);
     await loadDatabase();
@@ -802,7 +824,7 @@ export default function App() {
 
         <Route path="/about" element={<About onNavigate={navigateToView} />} />
         <Route path="/certification" element={<Certification onNavigate={navigateToView} />} />
-        <Route path="/resources" element={<Resources onNavigate={navigateToView} />} />
+        <Route path="/resources" element={<Resources onNavigate={navigateToView} content={content} />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/calendar" element={
           <LearningCalendar
@@ -828,6 +850,9 @@ export default function App() {
             notifications={notifications}
             surveys={surveys}
             surveyResponses={surveyResponses}
+            wishlist={wishlist}
+            onToggleWishlist={handleToggleWishlist}
+            onOpenCourse={handleOpenCourse}
             onOpenPlayer={(c, e) => setActivePlayer({ course: c, enrollment: e })}
             onOpenCertificate={setActiveCertificate}
             onTakeQuiz={handleTakeQuiz}
@@ -873,6 +898,7 @@ export default function App() {
             facilitators={facilitators}
             promos={promos}
             subscribers={subscribers}
+            content={content}
             onUpdateLeadStage={handleUpdateLeadStage}
             onUpdateAppStatus={handleUpdateAppStatus}
             onAddAsset={handleAddAsset}
@@ -882,6 +908,8 @@ export default function App() {
             onUpdatePaymentStatus={handleUpdatePaymentStatus}
             onSavePromo={handleSavePromo}
             onBroadcast={handleBroadcast}
+            onSaveContent={handleSaveContent}
+            onDeleteContent={handleDeleteContent}
           />
         )} />
 

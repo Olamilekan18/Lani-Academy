@@ -14,7 +14,8 @@ export type View =
   | "certification"
   | "resources"
   | "contact"
-  | "calendar";
+  | "calendar"
+  | "profile";
 
 export type DeliveryMode =
   | "Self-paced"
@@ -284,4 +285,18 @@ export type SurveyResponse = {
   ratings: number[];
   comment: string;
   submittedAt: string;
+};
+
+export type ContentItem = {
+  id: string;
+  type: "Article" | "Guide" | "Brochure" | "Flyer";
+  title: string;
+  excerpt: string;
+  body: string;
+  category: string;
+  imageUrl: string;
+  fileUrl: string;
+  author: string;
+  published: boolean;
+  createdAt: string;
 };
