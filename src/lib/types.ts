@@ -30,7 +30,8 @@ export type CourseStatus =
   | "Coming Soon"
   | "Application Required"
   | "Corporate Only"
-  | "Sold Out";
+  | "Sold Out"
+  | "Archived";
 
 export type ThematicArea = {
   id: string;

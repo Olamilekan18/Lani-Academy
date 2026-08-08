@@ -29,8 +29,9 @@ export default function Home({ courses, thematicAreas, onNavigate, onOpenCourse 
   const [activeFaq, setActiveFaq] = useState<number | null>(0);
   const [activeTestimonial, setActiveTestimonial] = useState(0);
 
-  const featuredCourses = courses.filter((c) => c.featured).slice(0, 3);
-  const featured = featuredCourses.length ? featuredCourses : courses.slice(0, 3);
+  const liveCourses = courses.filter((c) => c.status !== "Archived");
+  const featuredCourses = liveCourses.filter((c) => c.featured).slice(0, 3);
+  const featured = featuredCourses.length ? featuredCourses : liveCourses.slice(0, 3);
   const pillars = thematicAreas.slice(0, 8);
 
   const testimonials = [

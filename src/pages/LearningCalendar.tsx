@@ -26,6 +26,7 @@ export default function LearningCalendar({ courses, events, onOpenCourse, onNavi
   const upcomingCourses = useMemo(
     () =>
       courses
+        .filter((c) => c.status !== "Archived")
         .filter((c) => c.startDate && c.startDate >= today)
         .filter((c) => mode === "All" || c.deliveryModes.includes(mode))
         .filter((c) => month === "All" || monthKey(c.startDate) === month)

@@ -37,6 +37,7 @@ export default function Courses({
 
   // Filtering Logic
   const filteredCourses = courses.filter((course) => {
+    if (course.status === "Archived") return false;
     const matchesSearch =
       course.title.toLowerCase().includes(search.toLowerCase()) ||
       course.code.toLowerCase().includes(search.toLowerCase()) ||

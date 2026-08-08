@@ -79,7 +79,9 @@ import {
   dbGetNewsletterSubscribers,
   dbGetContent,
   dbSaveContent,
-  dbDeleteContent
+  dbDeleteContent,
+  dbSaveCalendarEvent,
+  dbDeleteCalendarEvent
 } from "./lib/db";
 import { formatMoney } from "./lib/utils";
 import { applySeo } from "./lib/seo";
@@ -560,6 +562,20 @@ export default function App() {
     else toast(`Queued for ${unique.length} recipient(s). Connect Resend to deliver.`);
   };
 
+  const handleSaveCalendarEvent = async (event: CalendarEvent) => {
+    const ok = await dbSaveCalendarEvent(event);
+    await loadDatabase();
+    if (ok) toast.success("Session scheduled");
+    else toast.error("Could not schedule session.");
+  };
+
+  const handleDeleteCalendarEvent = async (id: string) => {
+    const ok = await dbDeleteCalendarEvent(id);
+    await loadDatabase();
+    if (ok) toast.success("Session removed");
+    else toast.error("Could not remove session.");
+  };
+
   const handleSaveContent = async (item: Partial<ContentItem>) => {
     const ok = await dbSaveContent(item);
     await loadDatabase();
@@ -879,6 +895,8 @@ export default function App() {
             onSaveQuiz={handleSaveQuiz}
             onSaveAssignment={handleSaveAssignment}
             onSaveSurvey={handleSaveSurvey}
+            onSaveEvent={handleSaveCalendarEvent}
+            onDeleteEvent={handleDeleteCalendarEvent}
           />
         )} />
 
@@ -899,6 +917,7 @@ export default function App() {
             promos={promos}
             subscribers={subscribers}
             content={content}
+            calendarEvents={calendarEvents}
             onUpdateLeadStage={handleUpdateLeadStage}
             onUpdateAppStatus={handleUpdateAppStatus}
             onAddAsset={handleAddAsset}
@@ -910,6 +929,8 @@ export default function App() {
             onBroadcast={handleBroadcast}
             onSaveContent={handleSaveContent}
             onDeleteContent={handleDeleteContent}
+            onSaveEvent={handleSaveCalendarEvent}
+            onDeleteEvent={handleDeleteCalendarEvent}
           />
         )} />
 

@@ -563,6 +563,20 @@ export async function dbGetCalendarEvents(): Promise<CalendarEvent[]> {
   return toCamelCaseKeys(data || []) as CalendarEvent[];
 }
 
+export async function dbSaveCalendarEvent(event: CalendarEvent): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("calendar_events").upsert(toSnakeCaseKeys(event));
+  if (error) console.error("Error saving calendar event:", error.message);
+  return !error;
+}
+
+export async function dbDeleteCalendarEvent(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("calendar_events").delete().eq("id", id);
+  if (error) console.error("Error deleting calendar event:", error.message);
+  return !error;
+}
+
 export async function dbGetNotifications(): Promise<Notification[]> {
   if (!supabase) return [];
   const { data } = await supabase.from("notifications").select("*").order("created_at", { ascending: false });

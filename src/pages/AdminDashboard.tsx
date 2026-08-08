@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send } from "lucide-react";
+import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem } from "../lib/types";
+import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { seedDatabase, dbUploadFile } from "../lib/db";
+import CourseEditor from "../components/CourseEditor";
+import SessionScheduler from "../components/SessionScheduler";
 import toast from "react-hot-toast";
 
-type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"content"|"promos"|"broadcast";
+type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"content"|"sessions"|"promos"|"broadcast";
 
 interface Props {
   courses: Course[];
@@ -20,10 +22,13 @@ interface Props {
   promos: PromoCode[];
   subscribers: string[];
   content: ContentItem[];
+  calendarEvents: CalendarEvent[];
   onSavePromo: (p: Partial<PromoCode>) => Promise<void> | void;
   onBroadcast: (emails: string[], subject: string, message: string) => Promise<void> | void;
   onSaveContent: (i: Partial<ContentItem>) => Promise<void> | void;
   onDeleteContent: (id: string) => Promise<void> | void;
+  onSaveEvent: (e: CalendarEvent) => Promise<void> | void;
+  onDeleteEvent: (id: string) => Promise<void> | void;
   onUpdateLeadStage: (id: string, stage: CorporateLead["stage"]) => Promise<void>;
   onUpdateAppStatus: (id: string, status: ProgrammeApplication["status"]) => Promise<void>;
   onAddAsset: (d: any) => Promise<void>;
@@ -35,7 +40,7 @@ interface Props {
 
 const COLORS = ["#087443","#0b66c3","#c9972b","#d95845","#10a768","#6366f1","#ec4899","#14b8a6"];
 
-export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, content, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
+export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, content, calendarEvents, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onSaveEvent, onDeleteEvent, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-admin-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
@@ -44,6 +49,8 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   const [addingAsset, setAddingAsset] = useState(false);
   const [isAddingCourse, setIsAddingCourse] = useState(false);
   const [addingCourseObj, setAddingCourseObj] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Course | "new" | null>(null);
+  const courseThemes = Array.from(new Set(courses.map(c => c.thematicArea).filter(Boolean)));
   const [assigningCourse, setAssigningCourse] = useState<Course | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -214,6 +221,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     {key:"certificates",label:"Certificates",icon:Award,count:certificates.length},
     {key:"cms",label:"CMS Assets",icon:FileText,count:assets.length},
     {key:"content",label:"Articles & Resources",icon:Edit,count:content.length},
+    {key:"sessions",label:"Sessions",icon:Calendar,count:calendarEvents.length},
     {key:"promos",label:"Promo Codes",icon:Tag,count:promos.length},
     {key:"broadcast",label:"Broadcast",icon:Send},
   ];
@@ -436,117 +444,47 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
       {/* COURSES */}
       {tab === "courses" && (
         <div>
-          {!isAddingCourse ? (
+          {editingCourse === null ? (
             <>
               <div className="mb-4 flex items-center gap-3">
                 <div className="relative flex-1 max-w-sm"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search courses..." className="w-full rounded-lg border border-slate-200 pl-9 pr-4 py-2.5 text-sm"/></div>
-                <button onClick={() => setIsAddingCourse(true)} className="btn-primary min-h-10 text-xs gap-1.5"><Plus size={14}/>Add New Course</button>
+                <button onClick={() => setEditingCourse("new")} className="btn-primary min-h-10 text-xs gap-1.5"><Plus size={14}/>Add New Course</button>
               </div>
               <div className="table-shell border border-slate-200">
                 <table>
-                  <thead><tr><th>Course</th><th>Category</th><th>Price</th><th>Enrolled</th><th>Status</th><th>Actions</th></tr></thead>
+                  <thead><tr><th>Course</th><th>Curriculum</th><th>Price</th><th>Enrolled</th><th>Status</th><th>Actions</th></tr></thead>
                   <tbody className="divide-y divide-slate-100">
-                    {courses.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase())||c.code.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
+                    {courses.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase())||c.code.toLowerCase().includes(searchTerm.toLowerCase())).map(c => {
+                      const lessons = (c.modules || []).reduce((n, m) => n + (m.lessons?.length || 0), 0);
+                      return (
                       <tr key={c.id}>
                         <td><strong>{c.title}</strong><span>{c.code} • {c.thematicArea}</span></td>
-                        <td className="text-xs">{c.level}</td>
+                        <td className="text-xs">{(c.modules||[]).length} modules · {lessons} lessons</td>
                         <td className="font-bold text-lani-navy">{formatMoney(c.price)}</td>
                         <td><span className="text-xs font-bold">{c.enrolled}/{c.seats}</span></td>
-                        <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${c.status==="Open"?"bg-lani-emerald/15 text-lani-green":"bg-slate-100 text-slate-500"}`}>{c.status}</span></td>
+                        <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${c.status==="Open"?"bg-lani-emerald/15 text-lani-green":c.status==="Archived"?"bg-slate-200 text-slate-500":"bg-slate-100 text-slate-500"}`}>{c.status}</span></td>
                         <td>
-                          <button onClick={() => setAssigningCourse(c)} className="btn-secondary px-2 py-1 min-h-0 text-[10px] gap-1 h-6">
-                            <Users size={12}/> Assign Facilitator
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => setEditingCourse(c)} className="btn-secondary px-2 py-1 min-h-0 text-[10px] gap-1 h-6"><Edit size={12}/> Edit</button>
+                            <button onClick={() => setAssigningCourse(c)} className="btn-secondary px-2 py-1 min-h-0 text-[10px] gap-1 h-6"><Users size={12}/> Assign</button>
+                            {c.status !== "Archived" && (
+                              <button onClick={() => onAddCourse({ ...c, status: "Archived" })} className="text-[10px] font-bold text-slate-400 hover:text-red-500 px-1">Archive</button>
+                            )}
+                          </div>
                         </td>
                       </tr>
-                    ))}
+                    );})}
                   </tbody>
                 </table>
               </div>
             </>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 max-w-3xl">
-              <div className="flex items-center gap-4 mb-6 pb-4 border-b border-slate-100">
-                <button onClick={() => setIsAddingCourse(false)} className="h-8 w-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors"><ArrowLeft size={16}/></button>
-                <div>
-                  <h2 className="text-lg font-bold text-lani-navy">Create New Course</h2>
-                  <p className="text-xs text-slate-500">Fill in the details to publish a new course to the catalog.</p>
-                </div>
-              </div>
-              
-              <form onSubmit={handleAddCourseSubmit} className="grid gap-6">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <label className="form-field">Course Title<input name="title" required placeholder="e.g. Advanced Leadership Skills"/></label>
-                  <label className="form-field">Course Code<input name="code" required placeholder="e.g. LDR-301"/></label>
-                </div>
-                
-                <div className="grid sm:grid-cols-3 gap-4">
-                  <label className="form-field">Category
-                    <select name="category" required>
-                      <option value="Leadership">Leadership</option>
-                      <option value="Technology">Technology</option>
-                      <option value="Business">Business</option>
-                      <option value="Finance">Finance</option>
-                    </select>
-                  </label>
-                  <label className="form-field">Thematic Area<input name="thematicArea" required placeholder="e.g. Executive Management"/></label>
-                  <label className="form-field">Level
-                    <select name="level" required>
-                      <option value="Foundation">Foundation</option>
-                      <option value="Intermediate">Intermediate</option>
-                      <option value="Advanced">Advanced</option>
-                      <option value="Executive">Executive</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="grid sm:grid-cols-3 gap-4">
-                  <label className="form-field">Course Type
-                    <select name="type" required>
-                      <option value="Open Programme">Open Programme</option>
-                      <option value="Certification Prep">Certification Prep</option>
-                      <option value="Bootcamp">Bootcamp</option>
-                      <option value="Corporate">Corporate</option>
-                    </select>
-                  </label>
-                  <label className="form-field">Status
-                    <select name="status" required>
-                      <option value="Open">Open</option>
-                      <option value="Coming Soon">Coming Soon</option>
-                      <option value="Sold Out">Sold Out</option>
-                    </select>
-                  </label>
-                  <label className="form-field">Price (NGN)<input name="price" type="number" required placeholder="e.g. 150000" min="0"/></label>
-                </div>
-
-                <div className="grid sm:grid-cols-4 gap-4">
-                  <label className="form-field col-span-2">Duration<input name="duration" required placeholder="e.g. 4 Weeks"/></label>
-                  <label className="form-field">Start Date<input name="startDate" type="date" required/></label>
-                  <label className="form-field">End Date<input name="endDate" type="date" required/></label>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <label className="form-field">Total Seats<input name="seats" type="number" required defaultValue="50" min="1"/></label>
-                  <label className="form-field">Cover Image URL<input name="image" placeholder="https://..."/></label>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <label className="form-field">Intro / Lesson Video URL<input name="videoUrl" placeholder="YouTube, Vimeo, or direct .mp4 link"/></label>
-                  <label className="form-field">Course Materials (files)<input name="materialFiles" type="file" multiple accept="image/*,application/pdf,video/*,.ppt,.pptx,.doc,.docx,.xls,.xlsx"/></label>
-                </div>
-
-                <label className="form-field">Short Description
-                  <textarea name="shortDescription" required rows={2} placeholder="A brief summary of what this course offers..." className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-lani-green focus:outline-none focus:ring-1 focus:ring-lani-green resize-y"></textarea>
-                </label>
-
-                <div className="flex justify-end pt-4 border-t border-slate-100 gap-3">
-                  <button type="button" onClick={() => setIsAddingCourse(false)} className="btn-secondary text-xs">Cancel</button>
-                  <button type="submit" disabled={addingCourseObj} className="btn-primary min-h-10 text-xs px-6 gap-2">
-                    {addingCourseObj ? "Saving..." : <><Save size={14}/> Publish Course</>}
-                  </button>
-                </div>
-              </form>
-            </div>
+            <CourseEditor
+              initial={editingCourse === "new" ? null : editingCourse}
+              thematicAreas={courseThemes}
+              onSave={onAddCourse}
+              onCancel={() => setEditingCourse(null)}
+            />
           )}
         </div>
       )}
@@ -706,6 +644,11 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
             ) : <div className="py-16 text-center"><FileText className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No Assets</h3></div>}
           </div>
         </div>
+      )}
+
+      {/* SESSIONS */}
+      {tab === "sessions" && (
+        <SessionScheduler courses={courses.filter(c => c.status !== "Archived")} events={calendarEvents} onSave={onSaveEvent} onDelete={onDeleteEvent} />
       )}
 
       {/* CONTENT */}
