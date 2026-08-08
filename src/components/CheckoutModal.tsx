@@ -246,7 +246,7 @@ export default function CheckoutModal({
 
               {/* Promo code */}
               <div className="grid gap-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Promo code</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Promo code <span className="font-medium normal-case text-slate-400">(optional)</span></span>
                 <div className="flex gap-2">
                   <input
                     value={promo}

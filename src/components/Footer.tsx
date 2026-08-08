@@ -49,6 +49,7 @@ export default function Footer({ onNavigate }: FooterProps) {
             <ul className="mt-6 space-y-4">
               {([
                 { label: "Course Marketplace", view: "courses" },
+                { label: "Learning Pathways", view: "pathways" },
                 { label: "Certification", view: "certification" },
                 { label: "Corporate Training B2B", view: "corporate" },
                 { label: "Scholarship Applications", view: "applications" },

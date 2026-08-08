@@ -8,6 +8,7 @@ const DEFAULT_DESC =
 const ROUTES: Record<string, { title: string; description: string }> = {
   "/": { title: "Integrated Learning & Training Marketplace", description: DEFAULT_DESC },
   "/courses": { title: "Course Marketplace", description: "Browse and enrol in open programmes across eight thematic academies." },
+  "/pathways": { title: "Learning Pathways", description: "Curated sequences of courses that build role-ready skills step by step." },
   "/certification": { title: "Certification Programmes", description: "Professional certification preparation with verifiable digital certificates." },
   "/calendar": { title: "Training Calendar", description: "Upcoming open programmes and scheduled live sessions." },
   "/corporate": { title: "Corporate Training", description: "Custom in-plant, hybrid and executive training for organisations." },

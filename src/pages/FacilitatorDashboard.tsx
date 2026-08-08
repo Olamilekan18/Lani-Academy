@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star, Calendar } from "lucide-react";
-import type { Course, CourseModule, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt, Survey, SurveyResponse, AttendanceRecord } from "../lib/types";
+import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star, Calendar, MessageSquare } from "lucide-react";
+import type { Course, CourseModule, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt, Survey, SurveyResponse, AttendanceRecord, DiscussionPost } from "../lib/types";
 import { formatDate } from "../lib/utils";
 import toast from "react-hot-toast";
 import SessionScheduler from "../components/SessionScheduler";
 import CurriculumEditor from "../components/CurriculumEditor";
+import CourseForum from "../components/CourseForum";
 
 type DraftQuestion = { question: string; options: string[]; correctIndex: number };
 
-type Tab = "overview"|"courses"|"learners"|"grading"|"quizzes"|"assignments"|"surveys"|"sessions"|"announcements";
+type Tab = "overview"|"courses"|"learners"|"grading"|"quizzes"|"assignments"|"surveys"|"sessions"|"discussion"|"announcements";
 
 interface Props {
   courses: Course[];
@@ -33,9 +34,12 @@ interface Props {
   onSaveModules: (courseId: string, patch: Partial<Course>) => Promise<void> | void;
   attendance: AttendanceRecord[];
   onSaveAttendance: (records: AttendanceRecord[]) => Promise<void> | void;
+  discussions: DiscussionPost[];
+  onPostDiscussion: (post: DiscussionPost) => Promise<void> | void;
+  onDeleteDiscussion: (id: string) => Promise<void> | void;
 }
 
-export default function FacilitatorDashboard({ courses, enrollments, assignments, courseAssignments, submissions, announcements, calendarEvents, quizzes, quizAttempts, surveys, surveyResponses, onPostAnnouncement, onGradeSubmission, onSaveQuiz, onSaveAssignment, onSaveSurvey, onSaveEvent, onDeleteEvent, onSaveModules, attendance, onSaveAttendance }: Props) {
+export default function FacilitatorDashboard({ courses, enrollments, assignments, courseAssignments, submissions, announcements, calendarEvents, quizzes, quizAttempts, surveys, surveyResponses, onPostAnnouncement, onGradeSubmission, onSaveQuiz, onSaveAssignment, onSaveSurvey, onSaveEvent, onDeleteEvent, onSaveModules, attendance, onSaveAttendance, discussions, onPostDiscussion, onDeleteDiscussion }: Props) {
   const { profile, user } = useAuth();
   const [editingCurriculum, setEditingCurriculum] = useState<Course | null>(null);
   const [tab, setTab] = useState<Tab>(() => {
@@ -205,6 +209,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
     {key:"assignments",label:"Assignments",icon:FileText},
     {key:"surveys",label:"Surveys",icon:Star},
     {key:"sessions",label:"Sessions",icon:Calendar},
+    {key:"discussion",label:"Discussion",icon:MessageSquare},
     {key:"announcements",label:"Announcements",icon:Megaphone},
   ];
 
@@ -602,6 +607,11 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
       {/* SESSIONS */}
       {tab === "sessions" && (
         <SessionScheduler courses={quizCourses} events={calendarEvents} enrollments={myEnrollments} attendance={attendance} onSave={onSaveEvent} onDelete={onDeleteEvent} onSaveAttendance={onSaveAttendance} />
+      )}
+
+      {/* DISCUSSION */}
+      {tab === "discussion" && (
+        <CourseForum courses={quizCourses} discussions={discussions} onPost={onPostDiscussion} onDelete={onDeleteDiscussion} />
       )}
 
       {/* ANNOUNCEMENTS */}

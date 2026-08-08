@@ -20,7 +20,9 @@ import type {
   Survey,
   SurveyResponse,
   ContentItem,
-  AttendanceRecord
+  AttendanceRecord,
+  DiscussionPost,
+  Pathway
 } from "./types";
 import {
   mockQuizzes,
@@ -424,6 +426,18 @@ export async function dbSaveNotification(notification: Notification): Promise<bo
   return !error;
 }
 
+export async function dbMarkNotificationRead(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("notifications").update({ read: true }).eq("id", id);
+  return !error;
+}
+
+export async function dbMarkAllNotificationsRead(email: string): Promise<boolean> {
+  if (!supabase || !email) return false;
+  const { error } = await supabase.from("notifications").update({ read: true }).eq("learner_email", email).eq("read", false);
+  return !error;
+}
+
 // ── Promo codes ─────────────────────────────────────────────
 export async function dbGetPromos(): Promise<PromoCode[]> {
   if (!supabase) return [];
@@ -571,6 +585,46 @@ export async function dbGetCalendarEvents(): Promise<CalendarEvent[]> {
   if (!supabase) return [];
   const { data } = await supabase.from("calendar_events").select("*");
   return toCamelCaseKeys(data || []) as CalendarEvent[];
+}
+
+export async function dbGetPathways(): Promise<Pathway[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("pathways").select("*").order("created_at", { ascending: false });
+  return toCamelCaseKeys(data || []) as Pathway[];
+}
+
+export async function dbSavePathway(pathway: Partial<Pathway>): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("pathways").upsert(toSnakeCaseKeys(pathway));
+  if (error) console.error("Error saving pathway:", error.message);
+  return !error;
+}
+
+export async function dbDeletePathway(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("pathways").delete().eq("id", id);
+  if (error) console.error("Error deleting pathway:", error.message);
+  return !error;
+}
+
+export async function dbGetDiscussions(): Promise<DiscussionPost[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("discussions").select("*").order("created_at", { ascending: true });
+  return toCamelCaseKeys(data || []) as DiscussionPost[];
+}
+
+export async function dbSaveDiscussion(post: DiscussionPost): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("discussions").insert(toSnakeCaseKeys(post));
+  if (error) console.error("Error saving discussion:", error.message);
+  return !error;
+}
+
+export async function dbDeleteDiscussion(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("discussions").delete().eq("id", id);
+  if (error) console.error("Error deleting discussion:", error.message);
+  return !error;
 }
 
 export async function dbGetAttendance(): Promise<AttendanceRecord[]> {

@@ -15,7 +15,8 @@ export type View =
   | "resources"
   | "contact"
   | "calendar"
-  | "profile";
+  | "profile"
+  | "pathways";
 
 export type DeliveryMode =
   | "Self-paced"
@@ -99,6 +100,13 @@ export type Transaction = {
   createdAt: string;
 };
 
+export type CertificateType =
+  | "Completion"
+  | "Participation"
+  | "Professional Preparation"
+  | "Executive Programme"
+  | "Corporate Training";
+
 export type Certificate = {
   id: string;
   learnerName: string;
@@ -107,6 +115,7 @@ export type Certificate = {
   courseTitle: string;
   issueDate: string;
   status: "Issued" | "Revoked";
+  type?: CertificateType;
 };
 
 export type CorporateLead = {
@@ -145,6 +154,7 @@ export type ProgrammeApplication = {
   status: ApplicationStatus;
   score: number;
   createdAt: string;
+  attachments?: { name: string; url: string }[];
 };
 
 export type CmsAsset = {
@@ -295,6 +305,30 @@ export type AttendanceRecord = {
   courseId: string;
   status: "Present" | "Absent";
   recordedAt?: string;
+};
+
+export type Pathway = {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  courseIds: string[];
+  price: number;
+  featured: boolean;
+  published: boolean;
+  createdAt: string;
+};
+
+export type DiscussionPost = {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  authorEmail: string;
+  authorName: string;
+  authorRole: string;
+  body: string;
+  parentId?: string | null;
+  createdAt: string;
 };
 
 export type ContentItem = {

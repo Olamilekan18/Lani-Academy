@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar } from "lucide-react";
+import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar, Route } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord } from "../lib/types";
+import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord, Pathway } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { seedDatabase, dbUploadFile } from "../lib/db";
 import CourseEditor from "../components/CourseEditor";
 import SessionScheduler from "../components/SessionScheduler";
 import toast from "react-hot-toast";
 
-type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"content"|"sessions"|"promos"|"broadcast";
+type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"content"|"pathways"|"sessions"|"promos"|"broadcast";
 
 interface Props {
   courses: Course[];
@@ -25,6 +25,9 @@ interface Props {
   calendarEvents: CalendarEvent[];
   attendance: AttendanceRecord[];
   onSaveAttendance: (records: AttendanceRecord[]) => Promise<void> | void;
+  pathways: Pathway[];
+  onSavePathway: (p: Partial<Pathway>) => Promise<void> | void;
+  onDeletePathway: (id: string) => Promise<void> | void;
   onSavePromo: (p: Partial<PromoCode>) => Promise<void> | void;
   onBroadcast: (emails: string[], subject: string, message: string) => Promise<void> | void;
   onSaveContent: (i: Partial<ContentItem>) => Promise<void> | void;
@@ -33,6 +36,8 @@ interface Props {
   onDeleteEvent: (id: string) => Promise<void> | void;
   onUpdateLeadStage: (id: string, stage: CorporateLead["stage"]) => Promise<void>;
   onUpdateAppStatus: (id: string, status: ProgrammeApplication["status"]) => Promise<void>;
+  onConvertApplicant: (app: ProgrammeApplication, courseId: string) => Promise<void> | void;
+  onUpdateCertificateStatus: (cert: Certificate, status: Certificate["status"]) => Promise<void> | void;
   onAddAsset: (d: any) => Promise<void>;
   onAddCourse: (course: Partial<Course>) => Promise<void>;
   onAssignFacilitator: (assignment: FacilitatorAssignment) => Promise<void>;
@@ -42,7 +47,7 @@ interface Props {
 
 const COLORS = ["#087443","#0b66c3","#c9972b","#d95845","#10a768","#6366f1","#ec4899","#14b8a6"];
 
-export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, content, calendarEvents, attendance, onSaveAttendance, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onSaveEvent, onDeleteEvent, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
+export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, content, calendarEvents, attendance, onSaveAttendance, pathways, onSavePathway, onDeletePathway, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onSaveEvent, onDeleteEvent, onUpdateLeadStage, onUpdateAppStatus, onConvertApplicant, onUpdateCertificateStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-admin-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
@@ -54,6 +59,8 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   const [editingCourse, setEditingCourse] = useState<Course | "new" | null>(null);
   const courseThemes = Array.from(new Set(courses.map(c => c.thematicArea).filter(Boolean)));
   const [assigningCourse, setAssigningCourse] = useState<Course | null>(null);
+  const [enrollingApp, setEnrollingApp] = useState<ProgrammeApplication | null>(null);
+  const [enrolCourseId, setEnrolCourseId] = useState("");
   const [isAssigning, setIsAssigning] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -223,6 +230,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     {key:"certificates",label:"Certificates",icon:Award,count:certificates.length},
     {key:"cms",label:"CMS Assets",icon:FileText,count:assets.length},
     {key:"content",label:"Articles & Resources",icon:Edit,count:content.length},
+    {key:"pathways",label:"Pathways",icon:Route,count:pathways.length},
     {key:"sessions",label:"Sessions",icon:Calendar,count:calendarEvents.length},
     {key:"promos",label:"Promo Codes",icon:Tag,count:promos.length},
     {key:"broadcast",label:"Broadcast",icon:Send},
@@ -254,6 +262,30 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     await onBroadcast(bcRecipients(), bcSubject.trim(), bcMessage.trim());
     setBcBusy(false);
     setBcSubject(""); setBcMessage("");
+  };
+
+  const [pathwayCourses, setPathwayCourses] = useState<string[]>([]);
+  const [savingPathway, setSavingPathway] = useState(false);
+  const togglePathwayCourse = (id: string) => setPathwayCourses((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const handleSavePathwaySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    if (pathwayCourses.length === 0) { toast.error("Select at least one course."); return; }
+    setSavingPathway(true);
+    await onSavePathway({
+      id: "path-" + Date.now().toString(36),
+      title: fd.get("ptitle") as string,
+      description: (fd.get("pdesc") as string) || "",
+      image: (fd.get("pimage") as string) || "",
+      courseIds: pathwayCourses,
+      price: Number(fd.get("pprice")) || 0,
+      featured: false,
+      published: fd.get("ppublished") === "on",
+    });
+    setSavingPathway(false);
+    setPathwayCourses([]);
+    form.reset();
   };
 
   const [savingContent, setSavingContent] = useState(false);
@@ -574,17 +606,25 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
         <div className="table-shell border border-slate-200">
           {applications.length > 0 ? (
             <table>
-              <thead><tr><th>Applicant</th><th>Programme</th><th>Location</th><th>Score</th><th>Status</th></tr></thead>
+              <thead><tr><th>Applicant</th><th>Programme</th><th>Docs</th><th>Status</th><th>Action</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {applications.map(a => (
                   <tr key={a.id}>
-                    <td><strong>{a.applicantName}</strong><span>{a.email}</span></td>
+                    <td><strong>{a.applicantName}</strong><span>{a.email} • {a.location}</span></td>
                     <td className="text-xs">{a.programmeType}</td>
-                    <td className="text-xs">{a.location} ({a.organisation||"N/A"})</td>
-                    <td><span className="text-sm font-bold text-lani-navy">{a.score}</span></td>
+                    <td className="text-xs">
+                      {(a.attachments && a.attachments.length > 0) ? (
+                        <div className="flex flex-col gap-0.5">
+                          {a.attachments.map((f, i) => (
+                            <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-lani-blue hover:underline"><Eye size={11}/>{f.name.length > 18 ? f.name.slice(0, 16) + "…" : f.name}</a>
+                          ))}
+                        </div>
+                      ) : <span className="text-slate-400">—</span>}
+                    </td>
                     <td><select value={a.status} onChange={e => onUpdateAppStatus(a.id, e.target.value as any)} className="rounded border border-slate-200 px-2 py-1 text-xs font-semibold">
                       {["Submitted","Under Review","Shortlisted","Accepted","Waitlisted","Rejected"].map(s => <option key={s} value={s}>{s}</option>)}
                     </select></td>
+                    <td><button onClick={() => setEnrollingApp(a)} className="btn-secondary px-2 py-1 min-h-0 text-[10px] gap-1 h-6"><Plus size={12}/>Enrol</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -598,15 +638,20 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
         <div className="table-shell border border-slate-200">
           {certificates.length > 0 ? (
             <table>
-              <thead><tr><th>Certificate ID</th><th>Learner</th><th>Course</th><th>Issued</th><th>Status</th></tr></thead>
+              <thead><tr><th>Certificate ID</th><th>Learner</th><th>Course</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {certificates.map(c => (
                   <tr key={c.id}>
-                    <td><strong>{c.id}</strong></td>
+                    <td><strong>{c.id}</strong><span>{formatDate(c.issueDate)}</span></td>
                     <td><strong>{c.learnerName}</strong><span>{c.learnerEmail}</span></td>
                     <td className="text-xs font-semibold">{c.courseTitle}</td>
-                    <td className="text-xs">{formatDate(c.issueDate)}</td>
+                    <td className="text-xs">{c.type || "Completion"}</td>
                     <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${c.status==="Issued"?"bg-lani-emerald/15 text-lani-green":"bg-red-50 text-red-600"}`}>{c.status}</span></td>
+                    <td>
+                      {c.status === "Issued"
+                        ? <button onClick={() => onUpdateCertificateStatus(c, "Revoked")} className="text-xs font-bold text-red-500 hover:underline">Revoke</button>
+                        : <button onClick={() => onUpdateCertificateStatus(c, "Issued")} className="text-xs font-bold text-lani-green hover:underline">Reissue</button>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -653,6 +698,52 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
       {/* SESSIONS */}
       {tab === "sessions" && (
         <SessionScheduler courses={courses.filter(c => c.status !== "Archived")} events={calendarEvents} enrollments={enrollments} attendance={attendance} onSave={onSaveEvent} onDelete={onDeleteEvent} onSaveAttendance={onSaveAttendance} />
+      )}
+
+      {/* PATHWAYS */}
+      {tab === "pathways" && (
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+          <form className="form-panel border border-slate-200" onSubmit={handleSavePathwaySubmit}>
+            <div><span className="eyebrow">Bundle</span><h2 className="mt-3 text-lg font-bold text-lani-navy">Create Learning Pathway</h2></div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="form-field sm:col-span-2">Title<input name="ptitle" required placeholder="e.g. Digital Transformation Officer"/></label>
+              <label className="form-field sm:col-span-2">Description<textarea name="pdesc" rows={2} placeholder="What this pathway leads to"/></label>
+              <label className="form-field">Cover image URL<input name="pimage" placeholder="https://..."/></label>
+              <label className="form-field">Bundle price (NGN, 0 = sum)<input name="pprice" type="number" min={0} defaultValue={0}/></label>
+            </div>
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Courses in this pathway ({pathwayCourses.length})</span>
+              <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                {courses.filter(c => c.status !== "Archived").map(c => (
+                  <label key={c.id} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" checked={pathwayCourses.includes(c.id)} onChange={() => togglePathwayCourse(c.id)} className="h-4 w-4 accent-lani-green"/>
+                    <span className="truncate text-lani-navy">{c.title}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm font-semibold text-lani-navy"><input name="ppublished" type="checkbox" defaultChecked className="h-4 w-4 accent-lani-green"/> Published</label>
+            <button type="submit" disabled={savingPathway} className="btn-primary w-full justify-center text-xs"><Route size={14}/>{savingPathway ? "Saving..." : "Save Pathway"}</button>
+          </form>
+          <div className="table-shell border border-slate-200">
+            {pathways.length > 0 ? (
+              <table>
+                <thead><tr><th>Pathway</th><th>Courses</th><th>Price</th><th>Status</th><th></th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pathways.map(p => (
+                    <tr key={p.id}>
+                      <td><strong>{p.title}</strong><span className="line-clamp-1">{p.description}</span></td>
+                      <td className="text-xs">{p.courseIds.length}</td>
+                      <td className="font-bold text-lani-navy">{p.price > 0 ? formatMoney(p.price) : "Sum"}</td>
+                      <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${p.published?"bg-lani-emerald/15 text-lani-green":"bg-slate-100 text-slate-500"}`}>{p.published?"Published":"Draft"}</span></td>
+                      <td><button onClick={() => onDeletePathway(p.id)} className="text-red-500 hover:text-red-600"><Trash2 size={14}/></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <div className="py-16 text-center"><Route className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No pathways yet</h3></div>}
+          </div>
+        </div>
       )}
 
       {/* CONTENT */}
@@ -781,6 +872,30 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
             </div>
             <p className="text-[11px] text-slate-400">Emails are delivered via the send-email function (Resend). Until it's connected, this records intent without sending.</p>
           </form>
+        </div>
+      )}
+
+      {/* Enrol Applicant Modal */}
+      {enrollingApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl relative">
+            <button onClick={() => { setEnrollingApp(null); setEnrolCourseId(""); }} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"><XCircle size={20}/></button>
+            <h3 className="text-lg font-bold text-lani-navy">Enrol applicant</h3>
+            <p className="text-xs text-slate-500 mt-1 mb-6">Convert <strong>{enrollingApp.applicantName}</strong> into an enrolled learner.</p>
+            <label className="form-field">Select course
+              <select value={enrolCourseId} onChange={e => setEnrolCourseId(e.target.value)} required className="mt-1">
+                <option value="">-- Choose a course --</option>
+                {courses.filter(c => c.status !== "Archived").map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </select>
+            </label>
+            <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+              <button onClick={() => { setEnrollingApp(null); setEnrolCourseId(""); }} className="btn-secondary text-xs px-4">Cancel</button>
+              <button
+                onClick={async () => { if (!enrolCourseId) { toast.error("Choose a course."); return; } await onConvertApplicant(enrollingApp, enrolCourseId); setEnrollingApp(null); setEnrolCourseId(""); }}
+                className="btn-primary text-xs px-6"
+              >Enrol learner</button>
+            </div>
+          </div>
         </div>
       )}
 

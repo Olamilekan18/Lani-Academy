@@ -44,6 +44,12 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Generic transactional notification (assignment graded, new content, etc.)
+export function notificationEmail(title: string, body: string): EmailContent {
+  const html = shell(title, body.split("\n").map((l) => (l.trim() ? `<p>${escapeHtml(l)}</p>` : "<br/>")).join(""));
+  return { subject: `${title} — LANI Academy`, html };
+}
+
 // Generic admin broadcast — turns a plain-text message into branded HTML.
 export function broadcastEmail(subject: string, message: string): EmailContent {
   const body = message

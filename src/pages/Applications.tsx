@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Award, GraduationCap, Clock, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
-import { dbSaveApplication } from "../lib/db";
+import { dbSaveApplication, dbUploadFile } from "../lib/db";
 
 export default function Applications() {
   const [loading, setLoading] = useState(false);
@@ -12,6 +12,15 @@ export default function Applications() {
     setLoading(true);
     setError("");
     const formData = new FormData(e.currentTarget);
+
+    // Upload any supporting documents
+    const files = (formData.getAll("attachments") as File[]).filter((f) => f && f.size > 0);
+    const attachments: { name: string; url: string }[] = [];
+    for (const f of files) {
+      const url = await dbUploadFile(f, "applications");
+      if (url) attachments.push({ name: f.name, url });
+    }
+
     const appData = {
       id: "app-" + Math.random().toString(36).substring(2, 8),
       programmeType: formData.get("programmeType") as string,
@@ -24,6 +33,7 @@ export default function Applications() {
       status: "Submitted" as const,
       score: 0,
       createdAt: new Date().toISOString().split("T")[0],
+      attachments,
     };
 
     try {
@@ -182,6 +192,12 @@ export default function Applications() {
                   rows={5}
                   placeholder="Describe your career goals, community involvement, or financial need. Standard evaluation requires a minimum of 100 words..."
                 />
+              </label>
+
+              <label className="form-field sm:col-span-2">
+                Upload CV / supporting documents (optional)
+                <input name="attachments" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,image/*" />
+                <span className="text-[11px] font-medium text-slate-400">CV, ID, business profile or pitch deck — PDF, Word, PowerPoint or image.</span>
               </label>
 
               <div className="sm:col-span-2 mt-2">

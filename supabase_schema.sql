@@ -666,7 +666,71 @@ CREATE POLICY "Staff manage attendance" ON public.attendance FOR ALL USING (
 );
 
 -- ============================================================
--- 23. Secure role assignment (prevents privilege escalation)
+-- 23. Application attachments + certificate categories
+-- ============================================================
+ALTER TABLE public.programme_applications ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'Completion';
+
+-- ============================================================
+-- 24. Course discussion forums
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.discussions (
+  id TEXT PRIMARY KEY,
+  course_id TEXT REFERENCES public.courses(id) ON DELETE CASCADE,
+  course_title TEXT,
+  author_email TEXT NOT NULL,
+  author_name TEXT,
+  author_role TEXT,
+  body TEXT NOT NULL,
+  parent_id TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.discussions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "View course discussions" ON public.discussions;
+CREATE POLICY "View course discussions" ON public.discussions FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.enrollments e WHERE e.course_id = public.discussions.course_id AND e.learner_email = auth.email())
+  OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role IN ('facilitator','admin','super_admin'))
+);
+DROP POLICY IF EXISTS "Post course discussions" ON public.discussions;
+CREATE POLICY "Post course discussions" ON public.discussions FOR INSERT WITH CHECK (
+  author_email = auth.email() AND (
+    EXISTS (SELECT 1 FROM public.enrollments e WHERE e.course_id = public.discussions.course_id AND e.learner_email = auth.email())
+    OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role IN ('facilitator','admin','super_admin'))
+  )
+);
+DROP POLICY IF EXISTS "Delete own or staff discussions" ON public.discussions;
+CREATE POLICY "Delete own or staff discussions" ON public.discussions FOR DELETE USING (
+  author_email = auth.email()
+  OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role IN ('facilitator','admin','super_admin'))
+);
+
+-- ============================================================
+-- 25. Learning pathways / course bundles
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.pathways (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  image TEXT,
+  course_ids JSONB DEFAULT '[]',
+  price NUMERIC DEFAULT 0,
+  featured BOOLEAN DEFAULT false,
+  published BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.pathways ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Published pathways are public" ON public.pathways;
+CREATE POLICY "Published pathways are public" ON public.pathways FOR SELECT USING (
+  published = true
+  OR EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin','super_admin'))
+);
+DROP POLICY IF EXISTS "Admins manage pathways" ON public.pathways;
+CREATE POLICY "Admins manage pathways" ON public.pathways FOR ALL USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin','super_admin'))
+);
+
+-- ============================================================
+-- 26. Secure role assignment (prevents privilege escalation)
 -- ============================================================
 -- LANI Academy — Secure role assignment
 -- Prevents privilege escalation: a signed-in API user may self-select the

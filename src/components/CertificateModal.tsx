@@ -70,7 +70,7 @@ export default function CertificateModal({
                   LANI Academy Certification
                 </span>
                 <h2 className="font-serif mt-3 text-3xl font-bold tracking-tight text-lani-navy md:text-4xl">
-                  Certificate of Completion
+                  Certificate of {certificate.type || "Completion"}
                 </h2>
                 <div className="mt-2 h-0.5 w-24 bg-gradient-to-r from-transparent via-lani-gold to-transparent mx-auto" />
               </div>

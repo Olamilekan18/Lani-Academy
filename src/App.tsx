@@ -21,6 +21,7 @@ import Resources from "./pages/Resources";
 import Contact from "./pages/Contact";
 import LearningCalendar from "./pages/LearningCalendar";
 import OrganizationDashboard from "./pages/OrganizationDashboard";
+import Pathways from "./pages/Pathways";
 
 import LoadingScreen from "./components/LoadingScreen";
 import TwoFactorModal from "./components/TwoFactorModal";
@@ -84,7 +85,15 @@ import {
   dbDeleteCalendarEvent,
   dbUpdateCourse,
   dbGetAttendance,
-  dbSaveAttendance
+  dbSaveAttendance,
+  dbGetDiscussions,
+  dbSaveDiscussion,
+  dbDeleteDiscussion,
+  dbGetPathways,
+  dbSavePathway,
+  dbDeletePathway,
+  dbMarkNotificationRead,
+  dbMarkAllNotificationsRead
 } from "./lib/db";
 import { formatMoney } from "./lib/utils";
 import { applySeo } from "./lib/seo";
@@ -93,7 +102,8 @@ import {
   paymentConfirmationEmail,
   certificateReadyEmail,
   applicationStatusEmail,
-  broadcastEmail
+  broadcastEmail,
+  notificationEmail
 } from "./lib/emailTemplates";
 import type {
   View,
@@ -116,7 +126,9 @@ import type {
   Survey,
   SurveyResponse,
   ContentItem,
-  AttendanceRecord
+  AttendanceRecord,
+  DiscussionPost,
+  Pathway
 } from "./lib/types";
 
 export default function App() {
@@ -140,6 +152,8 @@ export default function App() {
   const [subscribers, setSubscribers] = useState<string[]>([]);
   const [content, setContent] = useState<ContentItem[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [discussions, setDiscussions] = useState<DiscussionPost[]>([]);
+  const [pathways, setPathways] = useState<Pathway[]>([]);
 
   // Mock data states for LMS features not yet in Supabase
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -207,13 +221,15 @@ export default function App() {
       const dbAssets = await dbGetAssets();
       setAssets(dbAssets);
 
-      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers, dbContent, dbAttendance] = await Promise.all([
+      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers, dbContent, dbAttendance, dbDiscussions, dbPathways] = await Promise.all([
         dbGetPromos(),
         dbGetSurveys(),
         dbGetSurveyResponses(),
         dbGetNewsletterSubscribers(),
         dbGetContent(),
         dbGetAttendance(),
+        dbGetDiscussions(),
+        dbGetPathways(),
       ]);
       setPromos(dbPromos);
       setSurveys(dbSurveys);
@@ -221,6 +237,8 @@ export default function App() {
       setSubscribers(dbSubscribers);
       setContent(dbContent);
       setAttendance(dbAttendance);
+      setDiscussions(dbDiscussions);
+      setPathways(dbPathways);
 
       // Load extended LMS features from Supabase
       const [
@@ -302,6 +320,7 @@ export default function App() {
     else if (view === "resources") navigate("/resources");
     else if (view === "contact") navigate("/contact");
     else if (view === "calendar") navigate("/calendar");
+    else if (view === "pathways") navigate("/pathways");
     else if (view === "profile") navigate("/learn?tab=profile");
   };
 
@@ -440,6 +459,33 @@ export default function App() {
     }
   };
 
+  // Convert an accepted applicant into an enrolled learner
+  const handleConvertApplicant = async (app: ProgrammeApplication, courseId: string) => {
+    const course = courses.find((c) => c.id === courseId);
+    const enrollment: Enrollment = {
+      id: "enr-" + Math.random().toString(36).substring(2, 8),
+      courseId,
+      learnerEmail: app.email,
+      learnerName: app.applicantName,
+      enrolledAt: new Date().toISOString().split("T")[0],
+      progress: 0,
+      completedLessons: [],
+      paymentStatus: "Successful",
+    };
+    try {
+      await dbSaveEnrollment(enrollment);
+      await dbUpdateApplicationStatus(app.id, "Accepted");
+      const mail = applicationStatusEmail(app.applicantName, app.programmeType, "Accepted — you're enrolled");
+      void dbSendEmail(app.email, mail.subject, mail.html);
+      notify("enrollment", "Application accepted", `You've been enrolled in ${course?.title || "your programme"}.`, app.email);
+      await loadDatabase();
+      toast.success(`${app.applicantName} enrolled in ${course?.title || courseId}`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not convert applicant.");
+    }
+  };
+
   // Scholarship applications status updates
   const handleUpdateAppStatus = async (id: string, status: ProgrammeApplication["status"]) => {
     try {
@@ -448,6 +494,7 @@ export default function App() {
       if (app?.email) {
         const mail = applicationStatusEmail(app.applicantName, app.programmeType, status);
         void dbSendEmail(app.email, mail.subject, mail.html);
+        notify("announcement", "Application update", `Your ${app.programmeType} application is now: ${status}`, app.email);
       }
       await loadDatabase();
     } catch (err) {
@@ -503,10 +550,8 @@ export default function App() {
   const handlePostAnnouncement = async (a: Omit<Announcement, "id"|"createdAt">) => {
     const newAnn: Announcement = { ...a, id: "ann-" + Date.now().toString(), createdAt: new Date().toISOString() };
     await dbSaveAnnouncement(newAnn);
-    // Notify every learner enrolled in the announced course
-    enrollments
-      .filter((e) => e.courseId === a.courseId)
-      .forEach((e) => notify("announcement", a.title, `New announcement in ${a.courseTitle}`, e.learnerEmail));
+    // Notify every enrolled learner — in-app + email (announcements are important)
+    notifyCourse(a.courseId, "announcement", a.title, `New announcement in ${a.courseTitle}:\n\n${a.body}`, true);
     await loadDatabase();
   };
 
@@ -514,6 +559,7 @@ export default function App() {
     const sub = submissions.find(s => s.id === subId);
     if (sub) {
       await dbSaveAssignmentSubmission({ ...sub, score, feedback, status: "Graded" });
+      notifyOne(sub.learnerEmail, "assessment", "Assignment graded", `Your submission scored ${score}.${feedback ? `\n\nFeedback: ${feedback}` : ""}`, true);
       await loadDatabase();
     }
   };
@@ -539,6 +585,7 @@ export default function App() {
 
   const handleSaveQuiz = async (quiz: Quiz) => {
     const ok = await dbSaveQuiz(quiz);
+    if (ok) notifyCourse(quiz.courseId, "assessment", `New quiz: ${quiz.title}`, `A new quiz is available in ${quiz.courseTitle}${quiz.dueDate ? ` — due ${quiz.dueDate}` : ""}.`, true);
     await loadDatabase();
     if (ok) toast.success(`Quiz "${quiz.title}" published`);
     else toast.error("Could not save quiz.");
@@ -546,6 +593,7 @@ export default function App() {
 
   const handleSaveAssignment = async (assignment: Assignment) => {
     const ok = await dbSaveAssignment(assignment);
+    if (ok) notifyCourse(assignment.courseId, "assessment", `New assignment: ${assignment.title}`, `A new assignment is due in ${assignment.courseTitle}${assignment.dueDate ? ` on ${assignment.dueDate}` : ""}.`, true);
     await loadDatabase();
     if (ok) toast.success(`Assignment "${assignment.title}" published`);
     else toast.error("Could not save assignment.");
@@ -576,6 +624,29 @@ export default function App() {
     else toast.error("Could not save curriculum.");
   };
 
+  const handleSavePathway = async (pathway: Partial<Pathway>) => {
+    const ok = await dbSavePathway(pathway);
+    await loadDatabase();
+    if (ok) toast.success("Pathway saved");
+    else toast.error("Could not save pathway.");
+  };
+
+  const handleDeletePathway = async (id: string) => {
+    await dbDeletePathway(id);
+    await loadDatabase();
+  };
+
+  const handleSaveDiscussion = async (post: DiscussionPost) => {
+    const ok = await dbSaveDiscussion(post);
+    await loadDatabase();
+    if (!ok) toast.error("Could not post. You must be enrolled in this course.");
+  };
+
+  const handleDeleteDiscussion = async (id: string) => {
+    await dbDeleteDiscussion(id);
+    await loadDatabase();
+  };
+
   const handleSaveAttendance = async (records: AttendanceRecord[]) => {
     const ok = await dbSaveAttendance(records);
     await loadDatabase();
@@ -585,6 +656,7 @@ export default function App() {
 
   const handleSaveCalendarEvent = async (event: CalendarEvent) => {
     const ok = await dbSaveCalendarEvent(event);
+    if (ok) notifyCourse(event.courseId, "reminder", `New session: ${event.title}`, `${event.type} on ${event.date} at ${event.time}${event.venue ? ` · ${event.venue}` : ""}.`, false);
     await loadDatabase();
     if (ok) toast.success("Session scheduled");
     else toast.error("Could not schedule session.");
@@ -595,6 +667,13 @@ export default function App() {
     await loadDatabase();
     if (ok) toast.success("Session removed");
     else toast.error("Could not remove session.");
+  };
+
+  const handleUpdateCertificateStatus = async (cert: Certificate, status: Certificate["status"]) => {
+    const ok = await dbSaveCertificate({ ...cert, status });
+    await loadDatabase();
+    if (ok) toast.success(status === "Revoked" ? "Certificate revoked" : "Certificate reissued");
+    else toast.error("Could not update certificate.");
   };
 
   const handleSaveContent = async (item: Partial<ContentItem>) => {
@@ -620,6 +699,7 @@ export default function App() {
 
   const handleSaveSurvey = async (survey: Survey) => {
     const ok = await dbSaveSurvey(survey);
+    if (ok) notifyCourse(survey.courseId, "reminder", `New survey: ${survey.title}`, `Please share your feedback for ${survey.courseTitle}.`, false);
     await loadDatabase();
     if (ok) toast.success(`Survey "${survey.title}" published`);
     else toast.error("Could not save survey.");
@@ -661,6 +741,30 @@ export default function App() {
       learnerEmail,
     };
     void dbSaveNotification(n);
+  };
+
+  // Dual-channel: in-app notification + email to one learner.
+  const notifyOne = (email: string, type: Notification["type"], title: string, body: string, withEmail = true) => {
+    if (!email) return;
+    notify(type, title, body, email);
+    if (withEmail) {
+      const mail = notificationEmail(title, body);
+      void dbSendEmail(email, mail.subject, mail.html);
+    }
+  };
+
+  // Fan out to every learner enrolled in a course.
+  const notifyCourse = (courseId: string, type: Notification["type"], title: string, body: string, withEmail = false) => {
+    enrollments.filter((e) => e.courseId === courseId).forEach((e) => notifyOne(e.learnerEmail, type, title, body, withEmail));
+  };
+
+  const handleMarkNotifRead = async (id: string) => {
+    await dbMarkNotificationRead(id);
+    await loadDatabase();
+  };
+  const handleMarkAllNotifsRead = async () => {
+    const email = profile?.email || user?.email;
+    if (email) { await dbMarkAllNotificationsRead(email); await loadDatabase(); }
   };
 
   const handleSubmitAssignment = async (
@@ -717,6 +821,7 @@ export default function App() {
     if (path.startsWith("/resources")) return "resources";
     if (path.startsWith("/contact")) return "contact";
     if (path.startsWith("/calendar")) return "calendar";
+    if (path.startsWith("/pathways")) return "pathways";
     return "home";
   };
 
@@ -871,6 +976,14 @@ export default function App() {
             onNavigate={navigateToView}
           />
         } />
+        <Route path="/pathways" element={
+          <Pathways
+            pathways={pathways}
+            courses={courses}
+            onOpenCourse={handleOpenCourse}
+            onNavigate={navigateToView}
+          />
+        } />
 
         <Route path="/learn" element={guardDashboard(["learner"], "learner",
           <LearnerDashboard
@@ -890,6 +1003,11 @@ export default function App() {
             wishlist={wishlist}
             onToggleWishlist={handleToggleWishlist}
             onOpenCourse={handleOpenCourse}
+            discussions={discussions}
+            onPostDiscussion={handleSaveDiscussion}
+            onDeleteDiscussion={handleDeleteDiscussion}
+            onMarkNotifRead={handleMarkNotifRead}
+            onMarkAllNotifsRead={handleMarkAllNotifsRead}
             onOpenPlayer={(c, e) => setActivePlayer({ course: c, enrollment: e })}
             onOpenCertificate={setActiveCertificate}
             onTakeQuiz={handleTakeQuiz}
@@ -921,6 +1039,9 @@ export default function App() {
             onSaveModules={handleUpdateCurriculum}
             attendance={attendance}
             onSaveAttendance={handleSaveAttendance}
+            discussions={discussions}
+            onPostDiscussion={handleSaveDiscussion}
+            onDeleteDiscussion={handleDeleteDiscussion}
           />
         )} />
 
@@ -944,8 +1065,13 @@ export default function App() {
             calendarEvents={calendarEvents}
             attendance={attendance}
             onSaveAttendance={handleSaveAttendance}
+            pathways={pathways}
+            onSavePathway={handleSavePathway}
+            onDeletePathway={handleDeletePathway}
             onUpdateLeadStage={handleUpdateLeadStage}
             onUpdateAppStatus={handleUpdateAppStatus}
+            onConvertApplicant={handleConvertApplicant}
+            onUpdateCertificateStatus={handleUpdateCertificateStatus}
             onAddAsset={handleAddAsset}
             onAddCourse={handleAddCourse}
             onAssignFacilitator={handleAssignFacilitator}

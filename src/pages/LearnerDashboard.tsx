@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { BookOpen, Award, CreditCard, PlayCircle, ShieldCheck, Calendar, ClipboardCheck, User, Bell, ChevronRight, CheckCircle, Clock, FileText, ExternalLink, TrendingUp, AlertCircle, Upload, Send, Loader2, Star } from "lucide-react";
-import type { Course, Enrollment, Certificate, Transaction, Quiz, QuizAttempt, Assignment, AssignmentSubmission, Announcement, CalendarEvent, Notification, Survey, SurveyResponse } from "../lib/types";
+import { BookOpen, Award, CreditCard, PlayCircle, ShieldCheck, Calendar, ClipboardCheck, User, Bell, ChevronRight, CheckCircle, Clock, FileText, ExternalLink, TrendingUp, AlertCircle, Upload, Send, Loader2, Star, MessageSquare } from "lucide-react";
+import type { Course, Enrollment, Certificate, Transaction, Quiz, QuizAttempt, Assignment, AssignmentSubmission, Announcement, CalendarEvent, Notification, Survey, SurveyResponse, DiscussionPost } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import toast from "react-hot-toast";
 import QuizModal from "../components/QuizModal";
+import CourseForum from "../components/CourseForum";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { dbUploadFile } from "../lib/db";
 import { supabase } from "../lib/supabase";
 
-type Tab = "overview"|"courses"|"schedule"|"assessments"|"certificates"|"transactions"|"profile";
+type Tab = "overview"|"courses"|"schedule"|"assessments"|"discussion"|"certificates"|"transactions"|"profile";
 
 interface Props {
   enrollments: Enrollment[];
@@ -30,12 +31,17 @@ interface Props {
   wishlist: string[];
   onToggleWishlist: (courseId: string) => void;
   onOpenCourse: (course: Course) => void;
+  discussions: DiscussionPost[];
+  onPostDiscussion: (post: DiscussionPost) => Promise<void> | void;
+  onDeleteDiscussion: (id: string) => Promise<void> | void;
+  onMarkNotifRead: (id: string) => Promise<void> | void;
+  onMarkAllNotifsRead: () => Promise<void> | void;
   onTakeQuiz: (q: Quiz, answers: number[], score: number, passed: boolean) => Promise<void> | void;
   onSubmitAssignment: (assignmentId: string, courseId: string, content: string, fileUrl?: string) => Promise<void> | void;
   onSubmitSurvey: (survey: Survey, ratings: number[], comment: string) => Promise<void> | void;
 }
 
-export default function LearnerDashboard({ enrollments, courses, certificates, transactions, quizzes, quizAttempts, assignments, submissions, announcements, calendarEvents, notifications, surveys, surveyResponses, wishlist, onToggleWishlist, onOpenCourse, onOpenPlayer, onOpenCertificate, onTakeQuiz, onSubmitAssignment, onSubmitSurvey }: Props) {
+export default function LearnerDashboard({ enrollments, courses, certificates, transactions, quizzes, quizAttempts, assignments, submissions, announcements, calendarEvents, notifications, surveys, surveyResponses, wishlist, onToggleWishlist, onOpenCourse, discussions, onPostDiscussion, onDeleteDiscussion, onMarkNotifRead, onMarkAllNotifsRead, onOpenPlayer, onOpenCertificate, onTakeQuiz, onSubmitAssignment, onSubmitSurvey }: Props) {
   const { profile, user, updateProfile } = useAuth();
   const myEmail = profile?.email || user?.email || "";
   const [tab, setTab] = useState<Tab>(() => {
@@ -47,7 +53,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   const [searchParams] = useSearchParams();
   useEffect(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["overview", "courses", "schedule", "assessments", "certificates", "transactions", "profile"];
+    const valid: Tab[] = ["overview", "courses", "schedule", "assessments", "discussion", "certificates", "transactions", "profile"];
     if (t && (valid as string[]).includes(t)) setTab(t as Tab);
   }, [searchParams]);
 
@@ -143,6 +149,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
     {key:"courses",label:"My Courses",icon:BookOpen},
     {key:"schedule",label:"Schedule",icon:Calendar},
     {key:"assessments",label:"Assessments",icon:ClipboardCheck},
+    {key:"discussion",label:"Discussion",icon:MessageSquare},
     {key:"certificates",label:"Certificates",icon:Award},
     {key:"transactions",label:"Payments",icon:CreditCard},
     {key:"profile",label:"Profile",icon:User},
@@ -165,13 +172,28 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
               {unreadNotifs > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-[10px] font-bold flex items-center justify-center">{unreadNotifs}</span>}
             </button>
             {notifOpen && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-80 overflow-y-auto">
-                <div className="p-3 border-b border-slate-100"><h3 className="text-sm font-bold text-lani-navy">Notifications</h3></div>
+              <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-96 overflow-y-auto">
+                <div className="flex items-center justify-between p-3 border-b border-slate-100 sticky top-0 bg-white">
+                  <h3 className="text-sm font-bold text-lani-navy">Notifications</h3>
+                  {unreadNotifs > 0 && (
+                    <button onClick={() => onMarkAllNotifsRead()} className="text-[10px] font-bold text-lani-blue hover:underline">Mark all read</button>
+                  )}
+                </div>
                 {notifications.map(n => (
-                  <div key={n.id} className={`px-3 py-2.5 border-b border-slate-50 text-left ${!n.read ? 'bg-lani-mist/50' : ''}`}>
-                    <p className="text-xs font-bold text-lani-navy">{n.title}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{n.body}</p>
-                  </div>
+                  <button
+                    key={n.id}
+                    onClick={() => { if (!n.read) onMarkNotifRead(n.id); }}
+                    className={`block w-full px-3 py-2.5 border-b border-slate-50 text-left transition-colors ${!n.read ? 'bg-lani-mist/50 hover:bg-lani-mist' : 'hover:bg-slate-50'}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      {!n.read && <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-lani-green" />}
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-lani-navy">{n.title}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5 whitespace-pre-wrap line-clamp-3">{n.body}</p>
+                        <p className="text-[9px] text-slate-400 mt-0.5">{formatDate(n.createdAt)}</p>
+                      </div>
+                    </div>
+                  </button>
                 ))}
                 {notifications.length === 0 && (
                   <div className="px-3 py-8 text-center text-xs text-slate-400">No notifications yet.</div>
@@ -456,6 +478,16 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
             </div>
           </div>
         </div>
+      )}
+
+      {/* DISCUSSION TAB */}
+      {tab === "discussion" && (
+        <CourseForum
+          courses={programs.map((p) => p.course).filter(Boolean) as Course[]}
+          discussions={discussions}
+          onPost={onPostDiscussion}
+          onDelete={onDeleteDiscussion}
+        />
       )}
 
       {/* CERTIFICATES TAB */}
