@@ -5,7 +5,7 @@
 -- Reviews are publicly readable so average ratings can show on course cards.
 
 CREATE TABLE IF NOT EXISTS public.course_reviews (
-    id TEXT PRIMARY KEY DEFAULT 'rev-' || encode(gen_random_bytes(6), 'hex'),
+    id TEXT PRIMARY KEY DEFAULT 'rev-' || substr(md5(random()::text || clock_timestamp()::text), 1, 12),
     course_id TEXT REFERENCES public.courses(id) ON DELETE CASCADE,
     learner_email TEXT NOT NULL,
     learner_name TEXT NOT NULL,

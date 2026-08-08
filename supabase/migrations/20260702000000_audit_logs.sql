@@ -5,7 +5,7 @@
 -- broadcasts, etc.). Any authenticated user can append; only admins can read.
 
 CREATE TABLE IF NOT EXISTS public.audit_logs (
-    id TEXT PRIMARY KEY DEFAULT 'aud-' || encode(gen_random_bytes(6), 'hex'),
+    id TEXT PRIMARY KEY DEFAULT 'aud-' || substr(md5(random()::text || clock_timestamp()::text), 1, 12),
     actor_email TEXT,
     actor_role TEXT,
     action TEXT NOT NULL,

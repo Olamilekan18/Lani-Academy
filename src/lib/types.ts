@@ -48,6 +48,13 @@ export type CourseModule = {
   materials?: { name: string; url: string }[];
   // Per-lesson downloadable materials, keyed by lesson title.
   lessonMaterials?: Record<string, { name: string; url: string }[]>;
+  // Drip release control:
+  //  - draft: true  → hidden/locked until the facilitator publishes it
+  //  - releaseAt    → ISO datetime; locked until this moment, then auto-unlocks
+  // Unreleased modules still count toward the course total, so a learner can't
+  // reach 100% (or earn a certificate) until everything is released and done.
+  draft?: boolean;
+  releaseAt?: string;
 };
 
 export type Course = {

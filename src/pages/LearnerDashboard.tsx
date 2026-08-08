@@ -7,7 +7,7 @@ import QuizModal from "../components/QuizModal";
 import CourseForum from "../components/CourseForum";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { dbUploadFile } from "../lib/db";
+import { dbUploadFile, dbRecordActivity, dbGetActivityDates } from "../lib/db";
 import { supabase } from "../lib/supabase";
 
 type Tab = "overview"|"courses"|"schedule"|"assessments"|"grades"|"discussion"|"certificates"|"transactions"|"profile";
@@ -57,26 +57,27 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
     if (t && (valid as string[]).includes(t)) setTab(t as Tab);
   }, [searchParams]);
 
-  // Client-side login streak: counts consecutive days the learner opened the dashboard.
-  const [streak, setStreak] = useState(1);
+  // Backend login streak: consecutive active days, tracked server-side (cross-device).
+  const [streak, setStreak] = useState(0);
   useEffect(() => {
     if (!myEmail) return;
-    try {
-      const key = `lani-streak-${myEmail}`;
-      const today = new Date().toISOString().slice(0, 10);
-      const raw = localStorage.getItem(key);
-      const prev = raw ? JSON.parse(raw) as { last: string; count: number } : null;
-      let count = 1;
-      if (prev) {
-        if (prev.last === today) count = prev.count;
-        else {
-          const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-          count = prev.last === y ? prev.count + 1 : 1;
-        }
+    let cancelled = false;
+    (async () => {
+      await dbRecordActivity(myEmail); // stamp today
+      const dates = await dbGetActivityDates(myEmail);
+      if (cancelled) return;
+      const set = new Set(dates);
+      let count = 0;
+      const d = new Date();
+      // Streak ends today (just recorded); walk backwards while days are present.
+      if (!set.has(d.toISOString().slice(0, 10))) d.setDate(d.getDate() - 1);
+      while (set.has(d.toISOString().slice(0, 10))) {
+        count++;
+        d.setDate(d.getDate() - 1);
       }
-      localStorage.setItem(key, JSON.stringify({ last: today, count }));
       setStreak(count);
-    } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
   }, [myEmail]);
 
   const [notifOpen, setNotifOpen] = useState(false);

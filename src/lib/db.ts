@@ -752,6 +752,34 @@ export async function dbDeleteNote(id: string): Promise<boolean> {
   return !error;
 }
 
+// ─── Learner activity / streak ───────────────────────────────
+// Record that the learner was active today (one row per day, idempotent).
+export async function dbRecordActivity(learnerEmail: string): Promise<void> {
+  if (!supabase || !learnerEmail) return;
+  try {
+    await supabase
+      .from("learner_activity")
+      .upsert(
+        { learner_email: learnerEmail, activity_date: new Date().toISOString().slice(0, 10) },
+        { onConflict: "learner_email,activity_date" }
+      );
+  } catch {
+    /* activity tracking must never block the app */
+  }
+}
+
+// Return the learner's active dates (YYYY-MM-DD), newest first.
+export async function dbGetActivityDates(learnerEmail: string): Promise<string[]> {
+  if (!supabase || !learnerEmail) return [];
+  const { data } = await supabase
+    .from("learner_activity")
+    .select("activity_date")
+    .eq("learner_email", learnerEmail)
+    .order("activity_date", { ascending: false })
+    .limit(400);
+  return (data || []).map((r: any) => r.activity_date as string);
+}
+
 // ─── Audit log ───────────────────────────────────────────────
 export async function dbGetAuditLogs(): Promise<AuditLog[]> {
   if (!supabase) return [];

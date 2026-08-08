@@ -5,7 +5,7 @@
 -- Owner-only visibility.
 
 CREATE TABLE IF NOT EXISTS public.lesson_notes (
-    id TEXT PRIMARY KEY DEFAULT 'note-' || encode(gen_random_bytes(6), 'hex'),
+    id TEXT PRIMARY KEY DEFAULT 'note-' || substr(md5(random()::text || clock_timestamp()::text), 1, 12),
     learner_email TEXT NOT NULL,
     course_id TEXT REFERENCES public.courses(id) ON DELETE CASCADE,
     lesson_title TEXT NOT NULL,

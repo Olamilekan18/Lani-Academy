@@ -849,7 +849,7 @@ CREATE POLICY "Organizations can view sponsored transactions" ON public.transact
 -- Reviews are publicly readable so average ratings can show on course cards.
 
 CREATE TABLE IF NOT EXISTS public.course_reviews (
-    id TEXT PRIMARY KEY DEFAULT 'rev-' || encode(gen_random_bytes(6), 'hex'),
+    id TEXT PRIMARY KEY DEFAULT 'rev-' || substr(md5(random()::text || clock_timestamp()::text), 1, 12),
     course_id TEXT REFERENCES public.courses(id) ON DELETE CASCADE,
     learner_email TEXT NOT NULL,
     learner_name TEXT NOT NULL,
@@ -904,7 +904,7 @@ CREATE INDEX IF NOT EXISTS idx_course_reviews_course ON public.course_reviews (c
 -- Owner-only visibility.
 
 CREATE TABLE IF NOT EXISTS public.lesson_notes (
-    id TEXT PRIMARY KEY DEFAULT 'note-' || encode(gen_random_bytes(6), 'hex'),
+    id TEXT PRIMARY KEY DEFAULT 'note-' || substr(md5(random()::text || clock_timestamp()::text), 1, 12),
     learner_email TEXT NOT NULL,
     course_id TEXT REFERENCES public.courses(id) ON DELETE CASCADE,
     lesson_title TEXT NOT NULL,
@@ -930,7 +930,7 @@ CREATE INDEX IF NOT EXISTS idx_lesson_notes_owner ON public.lesson_notes (learne
 -- broadcasts, etc.). Any authenticated user can append; only admins can read.
 
 CREATE TABLE IF NOT EXISTS public.audit_logs (
-    id TEXT PRIMARY KEY DEFAULT 'aud-' || encode(gen_random_bytes(6), 'hex'),
+    id TEXT PRIMARY KEY DEFAULT 'aud-' || substr(md5(random()::text || clock_timestamp()::text), 1, 12),
     actor_email TEXT,
     actor_role TEXT,
     action TEXT NOT NULL,
@@ -959,3 +959,33 @@ CREATE POLICY "Admins can read audit logs" ON public.audit_logs
     );
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON public.audit_logs (created_at DESC);
+
+
+-- 32. Learner activity (backend login/activity streak)
+-- ============================================================
+-- One row per learner per active day. Used to compute a cross-device
+-- learning streak. Owner-only; admins may read for analytics.
+
+CREATE TABLE IF NOT EXISTS public.learner_activity (
+    learner_email TEXT NOT NULL,
+    activity_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (learner_email, activity_date)
+);
+
+ALTER TABLE public.learner_activity ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Learners manage their own activity" ON public.learner_activity;
+CREATE POLICY "Learners manage their own activity" ON public.learner_activity
+    FOR ALL USING (auth.email() = learner_email)
+    WITH CHECK (auth.email() = learner_email);
+
+DROP POLICY IF EXISTS "Admins can read activity" ON public.learner_activity;
+CREATE POLICY "Admins can read activity" ON public.learner_activity
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE public.profiles.id = auth.uid()
+              AND (public.profiles.role = 'admin' OR public.profiles.role = 'super_admin')
+        )
+    );

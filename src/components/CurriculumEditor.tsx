@@ -14,7 +14,7 @@ interface Props {
 // (and reusable elsewhere). It does not expose commercial course fields.
 type Mat = { name: string; url: string };
 type DraftLesson = { title: string; materials: Mat[]; newFiles: File[] };
-type DraftMod = { title: string; lessons: DraftLesson[]; materials: Mat[]; newFiles: File[] };
+type DraftMod = { title: string; lessons: DraftLesson[]; materials: Mat[]; newFiles: File[]; draft: boolean; releaseAt: string };
 
 const toDraftLessons = (m: CourseModule): DraftLesson[] =>
   (m.lessons.length ? m.lessons : [""]).map((t) => ({ title: t, materials: m.lessonMaterials?.[t] || [], newFiles: [] }));
@@ -22,8 +22,8 @@ const toDraftLessons = (m: CourseModule): DraftLesson[] =>
 export default function CurriculumEditor({ course, onSave, onCancel }: Props) {
   const [modules, setModules] = useState<DraftMod[]>(
     course.modules?.length
-      ? course.modules.map((m) => ({ title: m.title, lessons: toDraftLessons(m), materials: m.materials || [], newFiles: [] }))
-      : [{ title: "", lessons: [{ title: "", materials: [], newFiles: [] }], materials: [], newFiles: [] }]
+      ? course.modules.map((m) => ({ title: m.title, lessons: toDraftLessons(m), materials: m.materials || [], newFiles: [], draft: m.draft || false, releaseAt: m.releaseAt || "" }))
+      : [{ title: "", lessons: [{ title: "", materials: [], newFiles: [] }], materials: [], newFiles: [], draft: false, releaseAt: "" }]
   );
   const [videoUrl, setVideoUrl] = useState(course.videoUrl || "");
   const [materialFiles, setMaterialFiles] = useState(course.materialFiles || []);
@@ -34,7 +34,8 @@ export default function CurriculumEditor({ course, onSave, onCancel }: Props) {
   const setModuleFiles = (i: number, files: File[]) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, newFiles: files } : mod)));
   const removeModuleMaterial = (i: number, mi: number) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, materials: mod.materials.filter((_, j) => j !== mi) } : mod)));
 
-  const addModule = () => setModules((m) => [...m, { title: "", lessons: [{ title: "", materials: [], newFiles: [] }], materials: [], newFiles: [] }]);
+  const addModule = () => setModules((m) => [...m, { title: "", lessons: [{ title: "", materials: [], newFiles: [] }], materials: [], newFiles: [], draft: false, releaseAt: "" }]);
+  const setModRelease = (i: number, patch: Partial<Pick<DraftMod, "draft" | "releaseAt">>) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, ...patch } : mod)));
   const removeModule = (i: number) => setModules((m) => (m.length > 1 ? m.filter((_, idx) => idx !== i) : m));
   const setTitle = (i: number, v: string) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, title: v } : mod)));
   const mapLesson = (i: number, li: number, fn: (l: DraftLesson) => DraftLesson) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, lessons: mod.lessons.map((l, j) => (j === li ? fn(l) : l)) } : mod)));
@@ -69,7 +70,7 @@ export default function CurriculumEditor({ course, onSave, onCancel }: Props) {
         if (lmats.length) lessonMaterials[lt] = lmats;
       }
       const title = m.title.trim();
-      if (title || lessons.length || materials.length) clean.push({ title, lessons, materials, lessonMaterials });
+      if (title || lessons.length || materials.length) clean.push({ title, lessons, materials, lessonMaterials, draft: m.draft || undefined, releaseAt: m.releaseAt || undefined });
     }
     const uploaded = [...materialFiles];
     for (const file of newFiles) {
@@ -116,6 +117,34 @@ export default function CurriculumEditor({ course, onSave, onCancel }: Props) {
               <GripVertical size={15} className="text-slate-300" />
               <input value={mod.title} onChange={(e) => setTitle(i, e.target.value)} placeholder={`Module ${i + 1} title`} className="min-h-10 flex-1 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-lani-gold focus:ring-2 focus:ring-lani-gold/20" />
               {modules.length > 1 && <button type="button" onClick={() => removeModule(i)} className="text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>}
+            </div>
+
+            {/* Release control */}
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-100 bg-white p-3">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Availability</span>
+              <select
+                value={mod.draft ? "draft" : mod.releaseAt ? "scheduled" : "now"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "now") setModRelease(i, { draft: false, releaseAt: "" });
+                  else if (v === "draft") setModRelease(i, { draft: true, releaseAt: "" });
+                  else setModRelease(i, { draft: false, releaseAt: mod.releaseAt || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16) });
+                }}
+                className="min-h-9 rounded-lg border border-slate-200 px-2 text-xs font-semibold outline-none focus:border-lani-gold"
+              >
+                <option value="now">Available now</option>
+                <option value="scheduled">Schedule release</option>
+                <option value="draft">Draft (hidden)</option>
+              </select>
+              {!mod.draft && mod.releaseAt && (
+                <input
+                  type="datetime-local"
+                  value={mod.releaseAt.slice(0, 16)}
+                  onChange={(e) => setModRelease(i, { releaseAt: e.target.value })}
+                  className="min-h-9 rounded-lg border border-slate-200 px-2 text-xs outline-none focus:border-lani-gold"
+                />
+              )}
+              <span className="text-[10px] text-slate-400">Locked content still counts toward the learner's total.</span>
             </div>
             <div className="mt-3 grid gap-3 pl-6">
               {mod.lessons.map((les, li) => (

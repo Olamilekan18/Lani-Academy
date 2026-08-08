@@ -156,7 +156,11 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
                 <h2 className="text-lg font-bold text-lani-navy tracking-tight mb-4">Curriculum Modules</h2>
                 <div className="grid gap-3">
                   {course.modules.map((mod, idx) => {
+                    if (mod.draft) return null; // hidden until published
                     const isExpanded = expandedModule === idx;
+                    const releaseLabel = mod.releaseAt && new Date(mod.releaseAt).getTime() > Date.now()
+                      ? new Date(mod.releaseAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+                      : null;
                     return (
                       <div
                         key={mod.title}
@@ -172,6 +176,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
                               {idx + 1}
                             </span>
                             {mod.title}
+                            {releaseLabel && <span className="rounded-full bg-lani-gold/10 px-2 py-0.5 text-[10px] font-bold text-lani-gold">Releases {releaseLabel}</span>}
                           </span>
                           <ChevronDown
                             size={16}

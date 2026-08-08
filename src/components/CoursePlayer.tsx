@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, PlayCircle, Download, FileText, CheckCircle2, Check, Eye, Image as ImageIcon, ExternalLink, Bookmark, StickyNote, Loader2 } from "lucide-react";
+import { X, PlayCircle, Download, FileText, CheckCircle2, Check, Eye, Image as ImageIcon, ExternalLink, Bookmark, StickyNote, Loader2, Lock } from "lucide-react";
 import type { Course, Enrollment, LessonNote } from "../lib/types";
 import { dbGetNotes, dbSaveNote } from "../lib/db";
 import toast from "react-hot-toast";
@@ -29,9 +29,16 @@ export default function CoursePlayer({
   onClose,
   onUpdateProgress,
 }: CoursePlayerProps) {
-  // Extract all lessons into a flat list for simple navigation
+  // A module is released if it isn't a draft and its release time has passed.
+  const nowMs = Date.now();
+  const isReleased = (m: Course["modules"][number]) =>
+    !m.draft && (!m.releaseAt || new Date(m.releaseAt).getTime() <= nowMs);
+
+  // Extract all lessons into a flat list for simple navigation.
+  // Locked (unreleased) lessons stay in the list — they count toward the total
+  // but can't be opened or completed until their module is released.
   const allLessons = course.modules.flatMap((m) =>
-    m.lessons.map((l) => ({ moduleTitle: m.title, lessonTitle: l }))
+    m.lessons.map((l) => ({ moduleTitle: m.title, lessonTitle: l, released: isReleased(m), releaseAt: m.releaseAt }))
   );
 
   // Every downloadable/viewable material across the course, module and lesson scopes
@@ -53,9 +60,12 @@ export default function CoursePlayer({
   ];
 
   const initialCompleted = enrollment.completedLessons || [];
-  const firstIncomplete = allLessons.findIndex((l) => !initialCompleted.includes(l.lessonTitle));
+  // Resume at the first released, incomplete lesson; fall back to the first released lesson.
+  const firstIncomplete = allLessons.findIndex((l) => l.released && !initialCompleted.includes(l.lessonTitle));
+  const firstReleased = allLessons.findIndex((l) => l.released);
+  const startIndex = firstIncomplete !== -1 ? firstIncomplete : firstReleased !== -1 ? firstReleased : 0;
 
-  const [activeLessonIndex, setActiveLessonIndex] = useState(firstIncomplete === -1 ? 0 : firstIncomplete);
+  const [activeLessonIndex, setActiveLessonIndex] = useState(startIndex);
   const [completed, setCompleted] = useState<string[]>(initialCompleted);
   const [saving, setSaving] = useState(false);
   const [viewer, setViewer] = useState<Material | null>(null);
@@ -78,6 +88,7 @@ export default function CoursePlayer({
     moduleTitle: "Introduction",
     lessonTitle: "Welcome to LANI Academy",
   };
+  const activeReleased = allLessons[activeLessonIndex]?.released ?? true;
 
   const pct = Math.min(
     100,
@@ -153,7 +164,9 @@ export default function CoursePlayer({
   const handleNextLesson = () => {
     const currentTitle = activeLesson.lessonTitle;
     if (!completed.includes(currentTitle)) toggleLessonComplete(currentTitle);
-    if (activeLessonIndex < allLessons.length - 1) setActiveLessonIndex(activeLessonIndex + 1);
+    // Advance to the next *released* lesson, skipping locked ones.
+    const nextReleased = allLessons.findIndex((l, i) => i > activeLessonIndex && l.released);
+    if (nextReleased !== -1) setActiveLessonIndex(nextReleased);
   };
 
   // A single viewable/downloadable material row
@@ -251,10 +264,12 @@ export default function CoursePlayer({
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h2 className="text-md font-bold tracking-tight text-white">Active Lesson Guide</h2>
               <p className="mt-3 text-sm leading-6 text-slate-400">
-                In this segment of <strong>{activeLesson.lessonTitle}</strong>, we cover key concepts, business applications, and case references. Open the accompanying materials below — each one you view counts toward your progress.
+                {activeReleased
+                  ? <>In this segment of <strong>{activeLesson.lessonTitle}</strong>, we cover key concepts, business applications, and case references. Open the accompanying materials below — each one you view counts toward your progress.</>
+                  : "This content hasn't been released yet. Check back when your facilitator publishes the next module — it's already counted in your course total."}
               </p>
-              <button type="button" onClick={handleNextLesson} className="btn-primary mt-6 w-full justify-center text-xs">
-                Complete and Continue
+              <button type="button" onClick={handleNextLesson} disabled={!activeReleased} className="btn-primary mt-6 w-full justify-center text-xs disabled:opacity-50">
+                {activeReleased ? "Complete and Continue" : "Not yet available"}
               </button>
             </div>
 
@@ -336,16 +351,35 @@ export default function CoursePlayer({
           </div>
 
           <div className="divide-y divide-slate-850 flex-1 overflow-y-auto">
-            {course.modules.map((mod, modIdx) => (
+            {course.modules.map((mod, modIdx) => {
+              const modReleased = isReleased(mod);
+              const releaseLabel = mod.releaseAt ? new Date(mod.releaseAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : null;
+              return (
               <div key={mod.title} className="p-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-lani-gold">
-                  Module {modIdx + 1}: {mod.title}
-                </h3>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-lani-gold">
+                    Module {modIdx + 1}: {mod.title}
+                  </h3>
+                  {!modReleased && (
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[9px] font-bold text-slate-400">
+                      <Lock size={9} />{releaseLabel ? `Releases ${releaseLabel}` : "Coming soon"}
+                    </span>
+                  )}
+                </div>
                 <div className="mt-3 grid gap-1.5">
                   {mod.lessons.map((les) => {
                     const idx = allLessons.findIndex((al) => al.lessonTitle === les);
                     const isActive = idx === activeLessonIndex;
                     const isDone = completed.includes(les);
+
+                    if (!modReleased) {
+                      return (
+                        <div key={les} className="flex items-center gap-2.5 rounded-lg p-2.5 text-xs text-slate-500">
+                          <Lock size={13} className="mt-0.5 shrink-0 text-slate-600" />
+                          <span className="line-clamp-1">{les}</span>
+                        </div>
+                      );
+                    }
 
                     return (
                       <div
@@ -379,7 +413,8 @@ export default function CoursePlayer({
                   })}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
