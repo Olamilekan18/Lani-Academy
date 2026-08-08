@@ -288,6 +288,15 @@ export type SurveyResponse = {
   submittedAt: string;
 };
 
+export type AttendanceRecord = {
+  sessionId: string;
+  learnerEmail: string;
+  learnerName: string;
+  courseId: string;
+  status: "Present" | "Absent";
+  recordedAt?: string;
+};
+
 export type ContentItem = {
   id: string;
   type: "Article" | "Guide" | "Brochure" | "Flyer";

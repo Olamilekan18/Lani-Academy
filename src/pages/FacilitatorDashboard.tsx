@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star, Calendar } from "lucide-react";
-import type { Course, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt, Survey, SurveyResponse } from "../lib/types";
+import type { Course, CourseModule, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt, Survey, SurveyResponse, AttendanceRecord } from "../lib/types";
 import { formatDate } from "../lib/utils";
 import toast from "react-hot-toast";
 import SessionScheduler from "../components/SessionScheduler";
+import CurriculumEditor from "../components/CurriculumEditor";
 
 type DraftQuestion = { question: string; options: string[]; correctIndex: number };
 
@@ -29,10 +30,14 @@ interface Props {
   onSaveSurvey: (s: Survey) => Promise<void> | void;
   onSaveEvent: (e: CalendarEvent) => Promise<void> | void;
   onDeleteEvent: (id: string) => Promise<void> | void;
+  onSaveModules: (courseId: string, patch: Partial<Course>) => Promise<void> | void;
+  attendance: AttendanceRecord[];
+  onSaveAttendance: (records: AttendanceRecord[]) => Promise<void> | void;
 }
 
-export default function FacilitatorDashboard({ courses, enrollments, assignments, courseAssignments, submissions, announcements, calendarEvents, quizzes, quizAttempts, surveys, surveyResponses, onPostAnnouncement, onGradeSubmission, onSaveQuiz, onSaveAssignment, onSaveSurvey, onSaveEvent, onDeleteEvent }: Props) {
+export default function FacilitatorDashboard({ courses, enrollments, assignments, courseAssignments, submissions, announcements, calendarEvents, quizzes, quizAttempts, surveys, surveyResponses, onPostAnnouncement, onGradeSubmission, onSaveQuiz, onSaveAssignment, onSaveSurvey, onSaveEvent, onDeleteEvent, onSaveModules, attendance, onSaveAttendance }: Props) {
   const { profile, user } = useAuth();
+  const [editingCurriculum, setEditingCurriculum] = useState<Course | null>(null);
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-facilitator-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
@@ -284,10 +289,17 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
 
       {/* COURSES */}
       {tab === "courses" && (
+        editingCurriculum ? (
+          <CurriculumEditor course={editingCurriculum} onSave={onSaveModules} onCancel={() => setEditingCurriculum(null)} />
+        ) : (
         <div className="grid gap-5">
+          {myCourses.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center text-sm text-slate-400">No courses assigned to you yet. An admin can assign you a course.</div>
+          )}
           {myCourses.map(c => {
             const courseEnr = myEnrollments.filter(e => e.courseId === c.id);
             const courseAvg = courseEnr.length > 0 ? Math.round(courseEnr.reduce((s,e) => s+e.progress, 0)/courseEnr.length) : 0;
+            const lessons = (c.modules || []).reduce((n, m) => n + (m.lessons?.length || 0), 0);
             return (
               <div key={c.id} className="rounded-xl border border-slate-200 p-5 hover:shadow-sm transition-all">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -296,19 +308,23 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-lani-gold">{c.code}</span>
                       <h3 className="text-base font-bold text-lani-navy">{c.title}</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">{courseEnr.length} learners • {c.deliveryModes.join(", ")} • {c.duration}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{courseEnr.length} learners • {(c.modules||[]).length} modules · {lessons} lessons • {c.duration}</p>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-xs font-semibold text-slate-500">Avg. Completion</div>
-                    <div className="text-xl font-extrabold text-lani-navy">{courseAvg}%</div>
-                    <div className="progress-bar mt-1 !h-2 w-32"><span style={{width:`${courseAvg}%`}}/></div>
+                  <div className="flex items-center gap-4 shrink-0">
+                    <div className="text-right">
+                      <div className="text-xs font-semibold text-slate-500">Avg. Completion</div>
+                      <div className="text-xl font-extrabold text-lani-navy">{courseAvg}%</div>
+                      <div className="progress-bar mt-1 !h-2 w-32"><span style={{width:`${courseAvg}%`}}/></div>
+                    </div>
+                    <button onClick={() => setEditingCurriculum(c)} className="btn-secondary min-h-9 px-3 text-xs gap-1.5"><ListChecks size={14}/>Manage curriculum</button>
                   </div>
                 </div>
               </div>
             );
           })}
         </div>
+        )
       )}
 
       {/* LEARNER PROGRESS */}
@@ -585,7 +601,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
 
       {/* SESSIONS */}
       {tab === "sessions" && (
-        <SessionScheduler courses={quizCourses} events={calendarEvents} onSave={onSaveEvent} onDelete={onDeleteEvent} />
+        <SessionScheduler courses={quizCourses} events={calendarEvents} enrollments={myEnrollments} attendance={attendance} onSave={onSaveEvent} onDelete={onDeleteEvent} onSaveAttendance={onSaveAttendance} />
       )}
 
       {/* ANNOUNCEMENTS */}

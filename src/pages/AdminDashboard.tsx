@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent } from "../lib/types";
+import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { seedDatabase, dbUploadFile } from "../lib/db";
 import CourseEditor from "../components/CourseEditor";
@@ -23,6 +23,8 @@ interface Props {
   subscribers: string[];
   content: ContentItem[];
   calendarEvents: CalendarEvent[];
+  attendance: AttendanceRecord[];
+  onSaveAttendance: (records: AttendanceRecord[]) => Promise<void> | void;
   onSavePromo: (p: Partial<PromoCode>) => Promise<void> | void;
   onBroadcast: (emails: string[], subject: string, message: string) => Promise<void> | void;
   onSaveContent: (i: Partial<ContentItem>) => Promise<void> | void;
@@ -40,7 +42,7 @@ interface Props {
 
 const COLORS = ["#087443","#0b66c3","#c9972b","#d95845","#10a768","#6366f1","#ec4899","#14b8a6"];
 
-export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, content, calendarEvents, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onSaveEvent, onDeleteEvent, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
+export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, content, calendarEvents, attendance, onSaveAttendance, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onSaveEvent, onDeleteEvent, onUpdateLeadStage, onUpdateAppStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-admin-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
@@ -482,7 +484,9 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
             <CourseEditor
               initial={editingCourse === "new" ? null : editingCourse}
               thematicAreas={courseThemes}
+              facilitators={facilitators}
               onSave={onAddCourse}
+              onAssign={onAssignFacilitator}
               onCancel={() => setEditingCourse(null)}
             />
           )}
@@ -648,7 +652,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
 
       {/* SESSIONS */}
       {tab === "sessions" && (
-        <SessionScheduler courses={courses.filter(c => c.status !== "Archived")} events={calendarEvents} onSave={onSaveEvent} onDelete={onDeleteEvent} />
+        <SessionScheduler courses={courses.filter(c => c.status !== "Archived")} events={calendarEvents} enrollments={enrollments} attendance={attendance} onSave={onSaveEvent} onDelete={onDeleteEvent} onSaveAttendance={onSaveAttendance} />
       )}
 
       {/* CONTENT */}

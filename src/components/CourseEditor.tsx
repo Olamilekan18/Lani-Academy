@@ -1,13 +1,15 @@
 import React, { useState } from "react";
 import { ArrowLeft, Plus, Trash2, Save, Loader2, X, GripVertical } from "lucide-react";
-import type { Course, CourseModule, CourseStatus, DeliveryMode } from "../lib/types";
+import type { Course, CourseModule, CourseStatus, DeliveryMode, FacilitatorAssignment } from "../lib/types";
 import { dbUploadFile } from "../lib/db";
 import toast from "react-hot-toast";
 
 interface CourseEditorProps {
   initial: Course | null;
   thematicAreas: string[];
+  facilitators: { fullName: string; email: string }[];
   onSave: (course: Partial<Course>) => Promise<void> | void;
+  onAssign: (assignment: FacilitatorAssignment) => Promise<void> | void;
   onCancel: () => void;
 }
 
@@ -16,7 +18,10 @@ const DELIVERY: DeliveryMode[] = ["Self-paced", "Instructor-led", "Virtual", "Ph
 const TYPES: Course["type"][] = ["Open Programme", "Certification Prep", "Bootcamp", "Corporate", "Sponsored"];
 const LEVELS: Course["level"][] = ["Foundation", "Intermediate", "Advanced", "Executive"];
 
-export default function CourseEditor({ initial, thematicAreas, onSave, onCancel }: CourseEditorProps) {
+export default function CourseEditor({ initial, thematicAreas, facilitators, onSave, onAssign, onCancel }: CourseEditorProps) {
+  const [facilitatorEmail, setFacilitatorEmail] = useState(
+    facilitators.find((x) => x.fullName === initial?.facilitator)?.email || ""
+  );
   const [f, setF] = useState({
     title: initial?.title || "",
     code: initial?.code || "",
@@ -78,8 +83,12 @@ export default function CourseEditor({ initial, thematicAreas, onSave, onCancel 
         .map((m) => ({ title: m.title.trim(), lessons: m.lessons.map((l) => l.trim()).filter(Boolean) }))
         .filter((m) => m.title || m.lessons.length);
 
+      const chosenFacilitator = facilitators.find((x) => x.email === facilitatorEmail);
+      const facilitatorName = chosenFacilitator?.fullName || f.facilitator || "TBD";
+      const courseId = initial?.id || "course-" + Math.random().toString(36).substring(2, 9);
+
       const course: Partial<Course> = {
-        id: initial?.id || "course-" + Math.random().toString(36).substring(2, 9),
+        id: courseId,
         title: f.title.trim(),
         code: f.code.trim(),
         category: f.category.trim(),
@@ -97,7 +106,7 @@ export default function CourseEditor({ initial, thematicAreas, onSave, onCancel 
         videoUrl: f.videoUrl || undefined,
         materialFiles: uploaded,
         certification: f.certification,
-        facilitator: f.facilitator,
+        facilitator: facilitatorName,
         shortDescription: f.shortDescription,
         fullDescription: f.fullDescription || f.shortDescription,
         outcomes: outcomes.split("\n").map((s) => s.trim()).filter(Boolean),
@@ -109,6 +118,15 @@ export default function CourseEditor({ initial, thematicAreas, onSave, onCancel 
         featured: f.featured,
       };
       await onSave(course);
+      if (chosenFacilitator) {
+        await onAssign({
+          facilitatorEmail: chosenFacilitator.email,
+          facilitatorName: chosenFacilitator.fullName,
+          courseId,
+          courseTitle: course.title || "",
+          assignedAt: new Date().toISOString(),
+        });
+      }
       onCancel();
     } catch (err) {
       console.error(err);
@@ -140,7 +158,13 @@ export default function CourseEditor({ initial, thematicAreas, onSave, onCancel 
               {thematicAreas.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </label>
-          <label className="form-field">Facilitator<input value={f.facilitator} onChange={(e) => set("facilitator", e.target.value)} /></label>
+          <label className="form-field">Facilitator
+            <select value={facilitatorEmail} onChange={(e) => setFacilitatorEmail(e.target.value)}>
+              <option value="">— Assign later —</option>
+              {facilitators.map((fa) => <option key={fa.email} value={fa.email}>{fa.fullName}</option>)}
+            </select>
+            {facilitators.length === 0 && <span className="text-[11px] font-medium text-slate-400">No facilitators yet — they appear here once they sign up via the Facilitator portal.</span>}
+          </label>
         </div>
         <div className="grid gap-4 sm:grid-cols-4">
           <label className="form-field">Type<select value={f.type} onChange={(e) => set("type", e.target.value)}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></label>

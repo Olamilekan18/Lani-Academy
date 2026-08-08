@@ -81,7 +81,10 @@ import {
   dbSaveContent,
   dbDeleteContent,
   dbSaveCalendarEvent,
-  dbDeleteCalendarEvent
+  dbDeleteCalendarEvent,
+  dbUpdateCourse,
+  dbGetAttendance,
+  dbSaveAttendance
 } from "./lib/db";
 import { formatMoney } from "./lib/utils";
 import { applySeo } from "./lib/seo";
@@ -112,7 +115,8 @@ import type {
   PromoCode,
   Survey,
   SurveyResponse,
-  ContentItem
+  ContentItem,
+  AttendanceRecord
 } from "./lib/types";
 
 export default function App() {
@@ -135,6 +139,7 @@ export default function App() {
   const [surveyResponses, setSurveyResponses] = useState<SurveyResponse[]>([]);
   const [subscribers, setSubscribers] = useState<string[]>([]);
   const [content, setContent] = useState<ContentItem[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
 
   // Mock data states for LMS features not yet in Supabase
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -202,18 +207,20 @@ export default function App() {
       const dbAssets = await dbGetAssets();
       setAssets(dbAssets);
 
-      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers, dbContent] = await Promise.all([
+      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers, dbContent, dbAttendance] = await Promise.all([
         dbGetPromos(),
         dbGetSurveys(),
         dbGetSurveyResponses(),
         dbGetNewsletterSubscribers(),
         dbGetContent(),
+        dbGetAttendance(),
       ]);
       setPromos(dbPromos);
       setSurveys(dbSurveys);
       setSurveyResponses(dbSurveyResponses);
       setSubscribers(dbSubscribers);
       setContent(dbContent);
+      setAttendance(dbAttendance);
 
       // Load extended LMS features from Supabase
       const [
@@ -562,6 +569,20 @@ export default function App() {
     else toast(`Queued for ${unique.length} recipient(s). Connect Resend to deliver.`);
   };
 
+  const handleUpdateCurriculum = async (courseId: string, patch: Partial<Course>) => {
+    const ok = await dbUpdateCourse(courseId, patch);
+    await loadDatabase();
+    if (ok) toast.success("Curriculum saved");
+    else toast.error("Could not save curriculum.");
+  };
+
+  const handleSaveAttendance = async (records: AttendanceRecord[]) => {
+    const ok = await dbSaveAttendance(records);
+    await loadDatabase();
+    if (ok) toast.success("Attendance saved");
+    else toast.error("Could not save attendance.");
+  };
+
   const handleSaveCalendarEvent = async (event: CalendarEvent) => {
     const ok = await dbSaveCalendarEvent(event);
     await loadDatabase();
@@ -897,6 +918,9 @@ export default function App() {
             onSaveSurvey={handleSaveSurvey}
             onSaveEvent={handleSaveCalendarEvent}
             onDeleteEvent={handleDeleteCalendarEvent}
+            onSaveModules={handleUpdateCurriculum}
+            attendance={attendance}
+            onSaveAttendance={handleSaveAttendance}
           />
         )} />
 
@@ -918,6 +942,8 @@ export default function App() {
             subscribers={subscribers}
             content={content}
             calendarEvents={calendarEvents}
+            attendance={attendance}
+            onSaveAttendance={handleSaveAttendance}
             onUpdateLeadStage={handleUpdateLeadStage}
             onUpdateAppStatus={handleUpdateAppStatus}
             onAddAsset={handleAddAsset}

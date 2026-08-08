@@ -19,7 +19,8 @@ import type {
   PromoCode,
   Survey,
   SurveyResponse,
-  ContentItem
+  ContentItem,
+  AttendanceRecord
 } from "./types";
 import {
   mockQuizzes,
@@ -144,6 +145,15 @@ export async function dbGetCourses(): Promise<Course[]> {
     return defaultCourses;
   }
   return toCamelCaseKeys(data) as Course[];
+}
+
+// Update specific columns on an existing course. Uses UPDATE (not upsert) so
+// it works under the facilitator "update assigned courses" RLS policy.
+export async function dbUpdateCourse(id: string, patch: Partial<Course>): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("courses").update(toSnakeCaseKeys(patch)).eq("id", id);
+  if (error) console.error("Error updating course:", error.message);
+  return !error;
 }
 
 export async function dbSaveCourse(course: Partial<Course>): Promise<boolean> {
@@ -561,6 +571,19 @@ export async function dbGetCalendarEvents(): Promise<CalendarEvent[]> {
   if (!supabase) return [];
   const { data } = await supabase.from("calendar_events").select("*");
   return toCamelCaseKeys(data || []) as CalendarEvent[];
+}
+
+export async function dbGetAttendance(): Promise<AttendanceRecord[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("attendance").select("*");
+  return toCamelCaseKeys(data || []) as AttendanceRecord[];
+}
+
+export async function dbSaveAttendance(records: AttendanceRecord[]): Promise<boolean> {
+  if (!supabase || records.length === 0) return false;
+  const { error } = await supabase.from("attendance").upsert(records.map((r) => toSnakeCaseKeys(r)));
+  if (error) console.error("Error saving attendance:", error.message);
+  return !error;
 }
 
 export async function dbSaveCalendarEvent(event: CalendarEvent): Promise<boolean> {

@@ -84,6 +84,16 @@ CREATE POLICY "Admins can modify courses" ON public.courses
         )
     );
 
+-- Assigned facilitators may update their own courses (e.g. manage curriculum)
+DROP POLICY IF EXISTS "Facilitators update assigned courses" ON public.courses;
+CREATE POLICY "Facilitators update assigned courses" ON public.courses
+    FOR UPDATE USING (
+        EXISTS (
+            SELECT 1 FROM public.facilitator_assignments fa
+            WHERE fa.course_id = public.courses.id AND fa.facilitator_email = auth.email()
+        )
+    );
+
 
 -- 4. Create Enrollments Table
 CREATE TABLE IF NOT EXISTS public.enrollments (
@@ -632,7 +642,31 @@ CREATE POLICY "Admins manage content" ON public.content FOR ALL USING (
 );
 
 -- ============================================================
--- 22. Secure role assignment (prevents privilege escalation)
+-- 22. Session attendance
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.attendance (
+  session_id TEXT REFERENCES public.calendar_events(id) ON DELETE CASCADE,
+  learner_email TEXT NOT NULL,
+  learner_name TEXT,
+  course_id TEXT,
+  status TEXT CHECK (status IN ('Present','Absent')) DEFAULT 'Present',
+  recorded_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+  PRIMARY KEY (session_id, learner_email)
+);
+ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Learners view their attendance" ON public.attendance;
+CREATE POLICY "Learners view their attendance" ON public.attendance FOR SELECT USING (auth.email() = learner_email);
+DROP POLICY IF EXISTS "Staff view attendance" ON public.attendance;
+CREATE POLICY "Staff view attendance" ON public.attendance FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin','super_admin','facilitator'))
+);
+DROP POLICY IF EXISTS "Staff manage attendance" ON public.attendance;
+CREATE POLICY "Staff manage attendance" ON public.attendance FOR ALL USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin','super_admin','facilitator'))
+);
+
+-- ============================================================
+-- 23. Secure role assignment (prevents privilege escalation)
 -- ============================================================
 -- LANI Academy — Secure role assignment
 -- Prevents privilege escalation: a signed-in API user may self-select the
