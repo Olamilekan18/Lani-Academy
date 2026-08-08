@@ -93,7 +93,8 @@ import {
   dbSavePathway,
   dbDeletePathway,
   dbMarkNotificationRead,
-  dbMarkAllNotificationsRead
+  dbMarkAllNotificationsRead,
+  dbLogEvent
 } from "./lib/db";
 import { formatMoney } from "./lib/utils";
 import { applySeo } from "./lib/seo";
@@ -338,6 +339,7 @@ export default function App() {
   // Open course page
   const handleOpenCourse = (course: Course) => {
     setSelectedCourse(course);
+    void dbLogEvent("view", course.id);
     navigate("/courses");
   };
 
@@ -381,6 +383,7 @@ export default function App() {
       // 1. Save to Supabase
       await dbSaveEnrollment(enrollment);
       await dbSaveTransaction(transaction);
+      void dbLogEvent("checkout_complete", selectedCourse.id, learnerEmail);
 
       // 2. Send confirmation email (no-op if email isn't configured)
       const mail = paymentConfirmationEmail(
@@ -612,9 +615,11 @@ export default function App() {
     for (const to of unique) {
       const ok = await dbSendEmail(to, mail.subject, mail.html);
       if (ok) sent++;
+      notify("announcement", subject, message, to); // in-app copy for account holders
     }
-    if (sent > 0) toast.success(`Broadcast sent to ${sent} recipient(s).`);
-    else toast(`Queued for ${unique.length} recipient(s). Connect Resend to deliver.`);
+    await loadDatabase();
+    if (sent > 0) toast.success(`Broadcast sent to ${sent} recipient(s) (email + in-app).`);
+    else toast(`In-app sent to ${unique.length}; connect Resend to also deliver email.`);
   };
 
   const handleUpdateCurriculum = async (courseId: string, patch: Partial<Course>) => {
@@ -944,6 +949,7 @@ export default function App() {
                   toast.error("Please verify your email before enrolling — check your inbox for the confirmation link.");
                   return;
                 }
+                if (selectedCourse) void dbLogEvent("checkout_start", selectedCourse.id, profile?.email || user?.email || undefined);
                 setShowCheckout(true);
               }}
             />

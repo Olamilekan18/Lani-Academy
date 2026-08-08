@@ -307,6 +307,14 @@ export type AttendanceRecord = {
   recordedAt?: string;
 };
 
+export type AnalyticsEvent = {
+  id: string;
+  type: "view" | "checkout_start" | "checkout_complete";
+  courseId: string | null;
+  learnerEmail: string | null;
+  createdAt: string;
+};
+
 export type Pathway = {
   id: string;
   title: string;

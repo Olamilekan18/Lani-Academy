@@ -22,7 +22,8 @@ import type {
   ContentItem,
   AttendanceRecord,
   DiscussionPost,
-  Pathway
+  Pathway,
+  AnalyticsEvent
 } from "./types";
 import {
   mockQuizzes,
@@ -585,6 +586,20 @@ export async function dbGetCalendarEvents(): Promise<CalendarEvent[]> {
   if (!supabase) return [];
   const { data } = await supabase.from("calendar_events").select("*");
   return toCamelCaseKeys(data || []) as CalendarEvent[];
+}
+
+// Fire-and-forget analytics event (view / checkout_start / checkout_complete)
+export async function dbLogEvent(type: AnalyticsEvent["type"], courseId?: string, learnerEmail?: string): Promise<void> {
+  if (!supabase) return;
+  try {
+    await supabase.from("analytics_events").insert({ type, course_id: courseId ?? null, learner_email: learnerEmail ?? null });
+  } catch { /* analytics must never block the app */ }
+}
+
+export async function dbGetAnalyticsEvents(): Promise<AnalyticsEvent[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("analytics_events").select("*").order("created_at", { ascending: false }).limit(5000);
+  return toCamelCaseKeys(data || []) as AnalyticsEvent[];
 }
 
 export async function dbGetPathways(): Promise<Pathway[]> {

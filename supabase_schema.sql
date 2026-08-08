@@ -730,7 +730,27 @@ CREATE POLICY "Admins manage pathways" ON public.pathways FOR ALL USING (
 );
 
 -- ============================================================
--- 26. Secure role assignment (prevents privilege escalation)
+-- 26. Analytics events (views, checkout funnel)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.analytics_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type TEXT NOT NULL,
+  course_id TEXT,
+  learner_email TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.analytics_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Anyone can log events" ON public.analytics_events;
+CREATE POLICY "Anyone can log events" ON public.analytics_events FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Admins read events" ON public.analytics_events;
+CREATE POLICY "Admins read events" ON public.analytics_events FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin','super_admin'))
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON public.analytics_events(type);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_course ON public.analytics_events(course_id);
+
+-- ============================================================
+-- 27. Secure role assignment (prevents privilege escalation)
 -- ============================================================
 -- LANI Academy — Secure role assignment
 -- Prevents privilege escalation: a signed-in API user may self-select the

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star, Calendar, MessageSquare } from "lucide-react";
+import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star, Calendar, MessageSquare, Bell } from "lucide-react";
 import type { Course, CourseModule, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt, Survey, SurveyResponse, AttendanceRecord, DiscussionPost } from "../lib/types";
 import { formatDate } from "../lib/utils";
 import toast from "react-hot-toast";
@@ -42,6 +42,7 @@ interface Props {
 export default function FacilitatorDashboard({ courses, enrollments, assignments, courseAssignments, submissions, announcements, calendarEvents, quizzes, quizAttempts, surveys, surveyResponses, onPostAnnouncement, onGradeSubmission, onSaveQuiz, onSaveAssignment, onSaveSurvey, onSaveEvent, onDeleteEvent, onSaveModules, attendance, onSaveAttendance, discussions, onPostDiscussion, onDeleteDiscussion }: Props) {
   const { profile, user } = useAuth();
   const [editingCurriculum, setEditingCurriculum] = useState<Course | null>(null);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-facilitator-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
@@ -193,6 +194,14 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
   const myEnrollments = enrollments.filter(e => myCourseIds.includes(e.courseId));
   const mySubmissions = submissions.filter(s => myCourseIds.includes(s.courseId));
   const pendingSubs = mySubmissions.filter(s => s.status === "Submitted");
+  const todayStr = new Date().toISOString().split("T")[0];
+  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+  const facAlerts = [
+    { label: "Submissions to grade", count: pendingSubs.length, tab: "grading" as Tab },
+    { label: "Upcoming sessions", count: calendarEvents.filter(e => myCourseIds.includes(e.courseId) && e.date >= todayStr).length, tab: "sessions" as Tab },
+    { label: "New discussion posts", count: discussions.filter(d => myCourseIds.includes(d.courseId) && d.createdAt >= weekAgo).length, tab: "discussion" as Tab },
+  ].filter(a => a.count > 0);
+  const totalFacAlerts = facAlerts.reduce((s, a) => s + a.count, 0);
   const myAnnouncements = announcements.filter(a => myCourseIds.includes(a.courseId));
   const myEvents = calendarEvents.filter(e => myCourseIds.includes(e.courseId)).sort((a,b) => a.date.localeCompare(b.date)).slice(0,5);
   const totalLearners = new Set(myEnrollments.map(e => e.learnerEmail)).size;
@@ -233,12 +242,31 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
   return (
     <div className="section bg-white text-left min-h-[50rem]">
       {/* Banner */}
-      <div className="mb-8 rounded-2xl bg-gradient-to-r from-lani-gold/90 to-amber-700 p-8 text-white relative overflow-hidden shadow-lg">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"/>
-        <div className="relative z-10 space-y-2">
-          <span className="eyebrow border-white/20 bg-white/5 text-white/90">Facilitator Portal</span>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">Welcome, {profile?.full_name || user?.email || "Facilitator"}</h1>
-          <p className="text-xs text-white/70 max-w-md">Manage your assigned courses, track learner progress, grade submissions, and post announcements.</p>
+      <div className="mb-8 rounded-2xl bg-gradient-to-r from-lani-gold/90 to-amber-700 p-8 text-white relative shadow-lg">
+        <div className="absolute inset-0 rounded-2xl overflow-hidden bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"/>
+        <div className="relative z-10 flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <span className="eyebrow border-white/20 bg-white/5 text-white/90">Facilitator Portal</span>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">Welcome, {profile?.full_name || user?.email || "Facilitator"}</h1>
+            <p className="text-xs text-white/70 max-w-md">Manage your assigned courses, track learner progress, grade submissions, and post announcements.</p>
+          </div>
+          <div className="relative shrink-0">
+            <button onClick={() => setAlertsOpen(!alertsOpen)} className="relative rounded-lg bg-white/10 border border-white/20 p-2.5 hover:bg-white/20 transition-all">
+              <Bell size={20} />
+              {totalFacAlerts > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-[10px] font-bold flex items-center justify-center">{totalFacAlerts}</span>}
+            </button>
+            {alertsOpen && (
+              <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 text-left">
+                <div className="p-3 border-b border-slate-100"><h3 className="text-sm font-bold text-lani-navy">Action needed</h3></div>
+                {facAlerts.length > 0 ? facAlerts.map(a => (
+                  <button key={a.tab} onClick={() => { setTab(a.tab); setAlertsOpen(false); }} className="flex w-full items-center justify-between px-3 py-2.5 border-b border-slate-50 text-left hover:bg-slate-50">
+                    <span className="text-xs font-semibold text-lani-navy">{a.label}</span>
+                    <span className="rounded-full bg-lani-coral/15 text-lani-coral text-[10px] font-bold px-2 py-0.5">{a.count}</span>
+                  </button>
+                )) : <div className="px-3 py-8 text-center text-xs text-slate-400">You're all caught up 🎉</div>}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

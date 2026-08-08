@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar, Route } from "lucide-react";
+import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar, Route, Bell } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord, Pathway } from "../lib/types";
+import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord, Pathway, AnalyticsEvent } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
-import { seedDatabase, dbUploadFile } from "../lib/db";
+import { seedDatabase, dbUploadFile, dbGetAnalyticsEvents } from "../lib/db";
 import CourseEditor from "../components/CourseEditor";
 import SessionScheduler from "../components/SessionScheduler";
 import toast from "react-hot-toast";
@@ -64,9 +64,26 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   const [isAssigning, setIsAssigning] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [events, setEvents] = useState<AnalyticsEvent[]>([]);
+  useEffect(() => { dbGetAnalyticsEvents().then(setEvents).catch(() => {}); }, []);
+  const viewCount = events.filter(e => e.type === "view").length;
+  const startCount = events.filter(e => e.type === "checkout_start").length;
+  const completeCount = events.filter(e => e.type === "checkout_complete").length;
+  const abandoned = Math.max(0, startCount - completeCount);
+  const checkoutConversion = startCount > 0 ? Math.round((completeCount / startCount) * 100) : 0;
+  const viewsByCourse = events.filter(e => e.type === "view" && e.courseId).reduce((acc: Record<string, number>, e) => { acc[e.courseId!] = (acc[e.courseId!] || 0) + 1; return acc; }, {});
+  const topViewed = Object.entries(viewsByCourse).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const maxViews = topViewed.length ? topViewed[0][1] : 0;
   const totalRevenue = transactions.filter(t => t.status==="Successful"||t.status==="Manually Confirmed").reduce((s,t) => s+Number(t.amount), 0);
   const avgCompletion = enrollments.length > 0 ? Math.round(enrollments.reduce((s,e) => s+e.progress, 0)/enrollments.length) : 0;
   const pendingPayments = transactions.filter(t => t.status === "Pending").length;
+  const adminAlerts = [
+    { label: "Payments to confirm", count: pendingPayments, tab: "payments" as Tab },
+    { label: "New corporate leads", count: leads.filter(l => l.stage === "New").length, tab: "leads" as Tab },
+    { label: "New applications", count: applications.filter(a => a.status === "Submitted").length, tab: "applications" as Tab },
+  ].filter(a => a.count > 0);
+  const totalAlerts = adminAlerts.reduce((s, a) => s + a.count, 0);
 
   const chartData = [{name:"Jan",Revenue:150000},{name:"Feb",Revenue:320000},{name:"Mar",Revenue:210000},{name:"Apr",Revenue:450000},{name:"May",Revenue:620000},{name:"Jun",Revenue:totalRevenue>0?totalRevenue:350000}];
 
@@ -239,14 +256,23 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   // Broadcast email state
   const [bcAudience, setBcAudience] = useState("learners");
   const [bcCourse, setBcCourse] = useState("");
+  const [bcCourseIds, setBcCourseIds] = useState<string[]>([]);
+  const [bcSelected, setBcSelected] = useState<string[]>([]);
   const [bcCustom, setBcCustom] = useState("");
   const [bcSubject, setBcSubject] = useState("");
   const [bcMessage, setBcMessage] = useState("");
   const [bcBusy, setBcBusy] = useState(false);
 
+  // Unique participants (name + email) across all enrollments
+  const participants = Array.from(new Map(enrollments.map(e => [e.learnerEmail, e])).values());
+  const toggleBcCourse = (id: string) => setBcCourseIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  const toggleBcSelected = (email: string) => setBcSelected(p => p.includes(email) ? p.filter(x => x !== email) : [...p, email]);
+
   const bcRecipients = (): string[] => {
     if (bcAudience === "learners") return enrollments.map(e => e.learnerEmail);
     if (bcAudience === "course") return enrollments.filter(e => e.courseId === bcCourse).map(e => e.learnerEmail);
+    if (bcAudience === "courses") return enrollments.filter(e => bcCourseIds.includes(e.courseId)).map(e => e.learnerEmail);
+    if (bcAudience === "participants") return bcSelected;
     if (bcAudience === "leads") return leads.map(l => l.email);
     if (bcAudience === "subscribers") return subscribers;
     if (bcAudience === "custom") return bcCustom.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
@@ -344,7 +370,24 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
           <h1 className="text-3xl font-extrabold text-white tracking-tight">Executive Dashboard</h1>
           <p className="text-xs text-slate-300 max-w-md">Manage courses, learners, payments, leads, applications, certificates and CMS assets.</p>
         </div>
-        <div className="relative z-10 flex gap-2">
+        <div className="relative z-10 flex items-center gap-2">
+          <div className="relative">
+            <button onClick={() => setAlertsOpen(!alertsOpen)} className="relative rounded-lg bg-white/10 border border-white/20 p-2.5 hover:bg-white/20 transition-all">
+              <Bell size={18} />
+              {totalAlerts > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-[10px] font-bold flex items-center justify-center">{totalAlerts}</span>}
+            </button>
+            {alertsOpen && (
+              <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 text-left">
+                <div className="p-3 border-b border-slate-100"><h3 className="text-sm font-bold text-lani-navy">Action needed</h3></div>
+                {adminAlerts.length > 0 ? adminAlerts.map(a => (
+                  <button key={a.tab} onClick={() => { setTab(a.tab); setAlertsOpen(false); }} className="flex w-full items-center justify-between px-3 py-2.5 border-b border-slate-50 text-left hover:bg-slate-50">
+                    <span className="text-xs font-semibold text-lani-navy">{a.label}</span>
+                    <span className="rounded-full bg-lani-coral/15 text-lani-coral text-[10px] font-bold px-2 py-0.5">{a.count}</span>
+                  </button>
+                )) : <div className="px-3 py-8 text-center text-xs text-slate-400">You're all caught up 🎉</div>}
+              </div>
+            )}
+          </div>
           <button onClick={handleSeed} disabled={seeding} className="rounded-lg bg-lani-gold hover:bg-yellow-600 text-lani-navy px-4 py-2.5 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
             <RefreshCw size={13} className={seeding?"animate-spin":""}/>{seeding?"Seeding...":"Seed Courses"}
           </button>
@@ -470,6 +513,53 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                 </div>
               </div>
               <button onClick={() => exportCsv("lani-leads.csv", leads.map(l => ({ organisation:l.organisation, contact:l.contactName, email:l.email, sector:l.sector, participants:l.participants, stage:l.stage, date:l.createdAt })))} className="btn-secondary mt-4 w-full justify-center text-xs"><Download size={13}/>Export Leads CSV</button>
+            </div>
+          </div>
+
+          {/* Traffic & funnel */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-sm font-bold text-lani-navy mb-4 uppercase tracking-wider flex items-center gap-1.5"><Eye size={16} className="text-lani-blue"/>Most Viewed Courses</h3>
+              {topViewed.length > 0 ? (
+                <div className="grid gap-3">
+                  {topViewed.map(([cid, n]) => {
+                    const c = courses.find(x => x.id === cid);
+                    return (
+                      <div key={cid} className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-slate-500 w-44 truncate" title={c?.title || cid}>{c?.title || cid}</span>
+                        <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-lani-blue rounded-full" style={{width:`${maxViews>0?(n/maxViews)*100:0}%`}}/></div>
+                        <span className="text-xs font-bold text-lani-navy w-8 text-right">{n}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <div className="py-10 text-center text-xs text-slate-400">No course views recorded yet.</div>}
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-sm font-bold text-lani-navy mb-4 uppercase tracking-wider flex items-center gap-1.5"><TrendingUp size={16} className="text-lani-green"/>Enrolment Funnel</h3>
+              <div className="grid gap-3">
+                {[
+                  { label: "Course views", val: viewCount, pct: 100 },
+                  { label: "Checkouts started", val: startCount, pct: viewCount > 0 ? (startCount / viewCount) * 100 : 0 },
+                  { label: "Checkouts completed", val: completeCount, pct: viewCount > 0 ? (completeCount / viewCount) * 100 : 0 },
+                ].map(step => (
+                  <div key={step.label} className="flex items-center gap-3">
+                    <span className="text-xs font-semibold text-slate-500 w-36">{step.label}</span>
+                    <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-lani-green rounded-full" style={{width:`${step.pct}%`}}/></div>
+                    <span className="text-xs font-bold text-lani-navy w-8 text-right">{step.val}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Checkout conversion</span>
+                  <strong className="block text-2xl font-extrabold text-lani-navy mt-1">{checkoutConversion}%</strong>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Abandoned checkouts</span>
+                  <strong className="block text-2xl font-extrabold text-lani-coral mt-1">{abandoned}</strong>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -837,6 +927,8 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
             {[
               { key: "learners", label: "All learners", count: new Set(enrollments.map(e => e.learnerEmail)).size },
               { key: "course", label: "Learners of a course", count: null },
+              { key: "courses", label: "Learners of selected courses", count: null },
+              { key: "participants", label: "Selected participants", count: null },
               { key: "leads", label: "Corporate leads", count: leads.length },
               { key: "subscribers", label: "Newsletter subscribers", count: subscribers.length },
               { key: "custom", label: "Custom email list", count: null },
@@ -854,6 +946,27 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                 <option value="">Select a course...</option>
                 {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
+            )}
+            {bcAudience === "courses" && (
+              <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                {courses.map(c => (
+                  <label key={c.id} className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" checked={bcCourseIds.includes(c.id)} onChange={() => toggleBcCourse(c.id)} className="h-4 w-4 accent-lani-blue"/>
+                    <span className="truncate text-lani-navy">{c.title}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {bcAudience === "participants" && (
+              <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                {participants.length === 0 && <p className="px-3 py-3 text-xs text-slate-400">No participants yet.</p>}
+                {participants.map(p => (
+                  <label key={p.learnerEmail} className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" checked={bcSelected.includes(p.learnerEmail)} onChange={() => toggleBcSelected(p.learnerEmail)} className="h-4 w-4 accent-lani-blue"/>
+                    <span className="min-w-0"><span className="block truncate font-semibold text-lani-navy">{p.learnerName}</span><span className="block truncate text-slate-400">{p.learnerEmail}</span></span>
+                  </label>
+                ))}
+              </div>
             )}
             {bcAudience === "custom" && (
               <textarea value={bcCustom} onChange={e => setBcCustom(e.target.value)} rows={4} placeholder="Emails separated by comma or new line" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"/>
