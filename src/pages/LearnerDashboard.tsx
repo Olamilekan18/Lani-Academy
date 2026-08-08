@@ -210,7 +210,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   return (
     <div className="section bg-white text-left min-h-[50rem]">
       {/* Welcome Banner */}
-      <div className="mb-8 rounded-2xl bg-gradient-to-r from-lani-navy to-slate-900 p-8 text-white relative shadow-lg">
+      <div className="mb-8 rounded-2xl bg-gradient-to-r from-lani-navy to-slate-900 p-8 text-white relative z-30 shadow-lg">
         <div className="absolute inset-0 rounded-2xl overflow-hidden bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-2">

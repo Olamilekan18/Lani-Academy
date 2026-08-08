@@ -290,9 +290,13 @@ export default function App() {
     }
   };
 
+  // Load on mount, then reload once the auth session/role resolves. RLS-gated
+  // lists (enrollments, transactions, etc.) return empty when queried before the
+  // user's role is known, so we re-hydrate when user/role becomes available.
   useEffect(() => {
     loadDatabase();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, profile?.role]);
 
   // Reset the 2FA gate whenever the user signs out.
   useEffect(() => {

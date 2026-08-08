@@ -88,7 +88,23 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   ].filter(a => a.count > 0);
   const totalAlerts = adminAlerts.reduce((s, a) => s + a.count, 0);
 
-  const chartData = [{name:"Jan",Revenue:150000},{name:"Feb",Revenue:320000},{name:"Mar",Revenue:210000},{name:"Apr",Revenue:450000},{name:"May",Revenue:620000},{name:"Jun",Revenue:totalRevenue>0?totalRevenue:350000}];
+  // Real revenue for the last 6 months, from confirmed transactions
+  const chartData = (() => {
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      return { name: d.toLocaleString(undefined, { month: "short" }), key: `${d.getFullYear()}-${d.getMonth()}`, Revenue: 0 };
+    });
+    const idx = new Map(months.map((m, i) => [m.key, i]));
+    for (const t of transactions) {
+      if (t.status !== "Successful" && t.status !== "Manually Confirmed") continue;
+      const d = new Date(t.createdAt);
+      if (isNaN(d.getTime())) continue;
+      const i = idx.get(`${d.getFullYear()}-${d.getMonth()}`);
+      if (i !== undefined) months[i].Revenue += Number(t.amount) || 0;
+    }
+    return months.map(({ name, Revenue }) => ({ name, Revenue }));
+  })();
 
   const areaCounts = courses.reduce((acc:Record<string,number>, c) => {
     acc[c.thematicArea] = (acc[c.thematicArea]||0) + enrollments.filter(e => e.courseId===c.id).length;
@@ -367,8 +383,8 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   return (
     <div className="section bg-white text-left min-h-[50rem]">
       {/* Banner */}
-      <div className="mb-8 rounded-2xl bg-gradient-to-r from-lani-blue to-slate-900 p-8 text-white relative overflow-hidden shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"/>
+      <div className="mb-8 rounded-2xl bg-gradient-to-r from-lani-blue to-slate-900 p-8 text-white relative z-30 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="absolute inset-0 rounded-2xl overflow-hidden bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"/>
         <div className="relative z-10 space-y-2">
           <span className="eyebrow border-white/20 bg-white/5 text-white/90">Administrative Operations</span>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">Executive Dashboard</h1>
@@ -639,7 +655,14 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                   <tr key={e.id}>
                     <td><strong>{e.learnerName}</strong><span>{e.learnerEmail}</span></td>
                     <td className="text-xs font-semibold">{c?.title||e.courseId}</td>
-                    <td><div className="flex items-center gap-2"><div className="progress-bar !h-2 w-20"><span style={{width:`${e.progress}%`}}/></div><span className="text-xs font-bold">{e.progress}%</span></div></td>
+                    <td>
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200">
+                          <div className={`h-full rounded-full transition-all duration-500 ${e.progress>=100?"bg-lani-green":"bg-lani-blue"}`} style={{width:`${Math.max(e.progress,2)}%`}}/>
+                        </div>
+                        <span className="w-9 text-right text-xs font-bold tabular-nums text-slate-600">{e.progress}%</span>
+                      </div>
+                    </td>
                     <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${e.paymentStatus==="Successful"?"bg-lani-emerald/15 text-lani-green":"bg-amber-100 text-amber-700"}`}>{e.paymentStatus}</span></td>
                     <td className="text-xs">{formatDate(e.enrolledAt)}</td>
                   </tr>

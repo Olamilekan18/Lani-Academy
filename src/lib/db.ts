@@ -752,6 +752,19 @@ export async function dbDeleteNote(id: string): Promise<boolean> {
   return !error;
 }
 
+// Look up a single certificate by ID (case-insensitive). Certificates are
+// publicly readable, so this works for anonymous verification too.
+export async function dbFindCertificate(id: string): Promise<Certificate | null> {
+  if (!supabase || !id.trim()) return null;
+  const { data, error } = await supabase
+    .from("certificates")
+    .select("*")
+    .ilike("id", id.trim())
+    .maybeSingle();
+  if (error) { console.error("Error verifying certificate:", error.message); return null; }
+  return data ? (toCamelCaseKeys(data) as Certificate) : null;
+}
+
 // ─── Learner activity / streak ───────────────────────────────
 // Record that the learner was active today (one row per day, idempotent).
 export async function dbRecordActivity(learnerEmail: string): Promise<void> {

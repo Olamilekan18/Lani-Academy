@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { ShieldCheck, BadgeCheck, FileText, Award, Search } from "lucide-react";
+import { BadgeCheck, Award, Search, Loader2, XCircle } from "lucide-react";
 import type { Certificate } from "../lib/types";
 import { formatDate } from "../lib/utils";
+import { dbFindCertificate } from "../lib/db";
 
 interface VerifyProps {
   certificates: Certificate[];
@@ -9,30 +10,33 @@ interface VerifyProps {
   onOpenCertificate: (certificate: Certificate) => void;
 }
 
+type Status = "idle" | "searching" | "found" | "notfound";
+
 export default function Verify({ certificates, initialQuery = "", onOpenCertificate }: VerifyProps) {
   const [query, setQuery] = useState(initialQuery);
   const [match, setMatch] = useState<Certificate | null>(null);
+  const [status, setStatus] = useState<Status>("idle");
 
+  const verify = async (raw: string) => {
+    const q = raw.trim();
+    if (!q) { setStatus("idle"); setMatch(null); return; }
+    setStatus("searching");
+    // Check the already-loaded list first (instant), then fall back to the DB.
+    const local = certificates.find((c) => c.id.toLowerCase() === q.toLowerCase());
+    const found = local || (await dbFindCertificate(q));
+    if (found) { setMatch(found); setStatus("found"); }
+    else { setMatch(null); setStatus("notfound"); }
+  };
+
+  // Accept a certificate id from app state OR a scanned QR link (?id=) and auto-verify.
   useEffect(() => {
-    // Accept a certificate id from the app state OR from a scanned QR link (?id=)
     const params = new URLSearchParams(window.location.search);
     const q = initialQuery || params.get("id") || "";
-    if (q) {
-      setQuery(q);
-      const m = certificates.find(
-        (cert) => cert.id.toLowerCase() === q.trim().toLowerCase()
-      );
-      setMatch(m || null);
-    }
-  }, [initialQuery, certificates]);
+    if (q) { setQuery(q); verify(q); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery]);
 
-  const handleSearch = (val: string) => {
-    setQuery(val);
-    const m = certificates.find(
-      (cert) => cert.id.toLowerCase() === val.trim().toLowerCase()
-    );
-    setMatch(m || null);
-  };
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); verify(query); };
 
   return (
     <div className="section bg-white text-left min-h-[50rem]">
@@ -51,19 +55,22 @@ export default function Verify({ certificates, initialQuery = "", onOpenCertific
         
         {/* Left Search panel */}
         <div className="form-panel border border-slate-200">
-          <label className="form-field">
+          <form onSubmit={handleSubmit} className="form-field">
             Certificate ID / Verification Code
             <div className="relative mt-1">
               <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 value={query}
-                onChange={(e) => handleSearch(e.target.value)}
-                placeholder="e.g. LANI-CERT-2026-001"
-                className="pl-10 min-h-11 w-full rounded-lg border border-slate-200"
+                onChange={(e) => { setQuery(e.target.value); if (status !== "idle") setStatus("idle"); }}
+                placeholder="e.g. LANI-CERT-1234"
+                className="!pl-10 min-h-11 w-full rounded-lg border border-slate-200"
               />
             </div>
-          </label>
+            <button type="submit" disabled={status === "searching" || !query.trim()} className="btn-primary mt-2 min-h-11 w-full justify-center text-sm disabled:opacity-50">
+              {status === "searching" ? <><Loader2 size={15} className="animate-spin" />Verifying…</> : <><BadgeCheck size={15} />Verify certificate</>}
+            </button>
+          </form>
 
           <div className="rounded-xl bg-slate-50 border border-slate-100 p-5 text-xs leading-6 text-slate-500 grid gap-2">
             <h3 className="font-bold text-lani-navy uppercase">Verification Audit Guidelines</h3>
@@ -75,7 +82,7 @@ export default function Verify({ certificates, initialQuery = "", onOpenCertific
 
         {/* Right Details Panel */}
         <div className="certificate-card border border-slate-200 shadow-md flex flex-col justify-between">
-          {match ? (
+          {status === "found" && match ? (
             <div className="space-y-6">
               <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
                 <div>
@@ -103,7 +110,9 @@ export default function Verify({ certificates, initialQuery = "", onOpenCertific
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase">Record Status</span>
-                  <span className="text-lani-green">Valid / {match.status}</span>
+                  <span className={match.status === "Revoked" ? "text-red-600 font-bold" : "text-lani-green"}>
+                    {match.status === "Revoked" ? "Revoked — no longer valid" : "Valid / Issued"}
+                  </span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block uppercase">Accredited Engine</span>
@@ -121,13 +130,30 @@ export default function Verify({ certificates, initialQuery = "", onOpenCertific
                 </button>
               </div>
             </div>
+          ) : status === "searching" ? (
+            <div className="grid min-h-80 place-items-center text-center">
+              <div>
+                <Loader2 className="mx-auto animate-spin text-lani-blue" size={40} />
+                <p className="mt-4 text-sm font-semibold text-slate-500">Checking the credential registry…</p>
+              </div>
+            </div>
+          ) : status === "notfound" ? (
+            <div className="grid min-h-80 place-items-center text-center">
+              <div>
+                <XCircle className="mx-auto text-red-400" size={54} />
+                <h2 className="mt-4 text-xl font-bold text-lani-navy">No matching certificate</h2>
+                <p className="mt-1.5 text-xs text-slate-500 max-w-xs mx-auto leading-5">
+                  We couldn't find a certificate with the ID <strong className="text-slate-700 font-mono">{query.trim()}</strong>. Check for typos and confirm it matches the ID printed on the award.
+                </p>
+              </div>
+            </div>
           ) : (
             <div className="grid min-h-80 place-items-center text-center">
               <div>
                 <Award className="mx-auto text-slate-300" size={54} />
-                <h2 className="mt-4 text-xl font-bold text-lani-navy">No verified records</h2>
+                <h2 className="mt-4 text-xl font-bold text-lani-navy">Verify a credential</h2>
                 <p className="mt-1.5 text-xs text-slate-500 max-w-xs mx-auto leading-5">
-                  Enter a verification ID (such as `LANI-CERT-2026-001`) in the search field to retrieve cryptographic credentials.
+                  Enter a certificate ID (such as <span className="font-mono">LANI-CERT-1234</span>) and press Verify to confirm its authenticity and status.
                 </p>
               </div>
             </div>
