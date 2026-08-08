@@ -10,7 +10,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { dbUploadFile } from "../lib/db";
 import { supabase } from "../lib/supabase";
 
-type Tab = "overview"|"courses"|"schedule"|"assessments"|"discussion"|"certificates"|"transactions"|"profile";
+type Tab = "overview"|"courses"|"schedule"|"assessments"|"grades"|"discussion"|"certificates"|"transactions"|"profile";
 
 interface Props {
   enrollments: Enrollment[];
@@ -53,9 +53,31 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   const [searchParams] = useSearchParams();
   useEffect(() => {
     const t = searchParams.get("tab");
-    const valid: Tab[] = ["overview", "courses", "schedule", "assessments", "discussion", "certificates", "transactions", "profile"];
+    const valid: Tab[] = ["overview", "courses", "schedule", "assessments", "grades", "discussion", "certificates", "transactions", "profile"];
     if (t && (valid as string[]).includes(t)) setTab(t as Tab);
   }, [searchParams]);
+
+  // Client-side login streak: counts consecutive days the learner opened the dashboard.
+  const [streak, setStreak] = useState(1);
+  useEffect(() => {
+    if (!myEmail) return;
+    try {
+      const key = `lani-streak-${myEmail}`;
+      const today = new Date().toISOString().slice(0, 10);
+      const raw = localStorage.getItem(key);
+      const prev = raw ? JSON.parse(raw) as { last: string; count: number } : null;
+      let count = 1;
+      if (prev) {
+        if (prev.last === today) count = prev.count;
+        else {
+          const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+          count = prev.last === y ? prev.count + 1 : 1;
+        }
+      }
+      localStorage.setItem(key, JSON.stringify({ last: today, count }));
+      setStreak(count);
+    } catch { /* ignore */ }
+  }, [myEmail]);
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
@@ -144,11 +166,40 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   const myAssignments = assignments.filter(a => enrollments.some(e => e.courseId === a.courseId));
   const mySurveys = surveys.filter(s => enrollments.some(e => e.courseId === s.courseId));
 
+  // Continue learning: furthest-along course that isn't finished yet
+  const continueProgram = programs
+    .filter(p => p.enrollment.progress < 100)
+    .sort((a, b) => b.enrollment.progress - a.enrollment.progress)[0];
+
+  // Upcoming deadlines: assignment/quiz due dates + assessment-deadline events, future only
+  const today0 = new Date().toISOString().slice(0, 10);
+  const deadlines = [
+    ...myAssignments.filter(a => a.dueDate && a.dueDate >= today0).map(a => ({ id: `a-${a.id}`, title: a.title, courseTitle: a.courseTitle, date: a.dueDate, kind: "Assignment" })),
+    ...myQuizzes.filter(q => q.dueDate && q.dueDate >= today0).map(q => ({ id: `q-${q.id}`, title: q.title, courseTitle: q.courseTitle, date: q.dueDate, kind: "Quiz" })),
+    ...calendarEvents.filter(ev => ev.type === "Assessment Deadline" && ev.date >= today0 && enrollments.some(e => e.courseId === ev.courseId)).map(ev => ({ id: `e-${ev.id}`, title: ev.title, courseTitle: ev.courseTitle, date: ev.date, kind: "Deadline" })),
+  ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
+
+  // Gradebook rows: quiz attempts + graded assignment submissions for this learner
+  const myAttempts = quizAttempts.filter(a => a.learnerEmail === myEmail);
+  const mySubmissions = submissions.filter(s => s.learnerEmail === myEmail);
+  const gradeRows = [
+    ...myAttempts.map(a => {
+      const quiz = quizzes.find(q => q.id === a.quizId);
+      return { id: `qa-${a.id}`, course: quiz?.courseTitle || "—", item: quiz?.title || "Quiz", type: "Quiz", score: `${a.score}%`, status: a.passed ? "Passed" : "Failed", date: a.submittedAt, ok: a.passed };
+    }),
+    ...mySubmissions.map(s => {
+      const asg = assignments.find(x => x.id === s.assignmentId);
+      const scored = s.score !== null && s.score !== undefined;
+      return { id: `as-${s.id}`, course: asg?.courseTitle || "—", item: asg?.title || "Assignment", type: "Assignment", score: scored ? `${s.score}/${asg?.maxScore ?? 100}` : "—", status: s.status, date: s.submittedAt, ok: s.status === "Graded" };
+    }),
+  ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
   const tabs: {key:Tab;label:string;icon:any}[] = [
     {key:"overview",label:"Overview",icon:TrendingUp},
     {key:"courses",label:"My Courses",icon:BookOpen},
     {key:"schedule",label:"Schedule",icon:Calendar},
     {key:"assessments",label:"Assessments",icon:ClipboardCheck},
+    {key:"grades",label:"Grades",icon:TrendingUp},
     {key:"discussion",label:"Discussion",icon:MessageSquare},
     {key:"certificates",label:"Certificates",icon:Award},
     {key:"transactions",label:"Payments",icon:CreditCard},
@@ -210,7 +261,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
           {label:"Active Courses",val:programs.length.toString(),icon:BookOpen,color:"text-lani-blue"},
           {label:"Avg. Progress",val:`${avgProgress}%`,icon:ShieldCheck,color:"text-lani-green"},
           {label:"Certificates",val:certificates.length.toString(),icon:Award,color:"text-lani-gold"},
-          {label:"Payments",val:transactions.length.toString(),icon:CreditCard,color:"text-slate-600"},
+          {label:"Day Streak",val:`${streak}🔥`,icon:TrendingUp,color:"text-lani-coral"},
         ].map(t => (
           <div key={t.label} className="rounded-xl border border-slate-150 bg-slate-50 p-5 flex items-center gap-4">
             <div className={`h-10 w-10 rounded-lg bg-white shadow-sm flex items-center justify-center ${t.color}`}><t.icon size={20}/></div>
@@ -233,8 +284,39 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
 
       {/* OVERVIEW TAB */}
       {tab === "overview" && (
+        <>
+        {/* Continue learning */}
+        {continueProgram && continueProgram.course && (
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-lani-green/20 bg-lani-green/5 p-5">
+            <div className="flex items-center gap-4 min-w-0">
+              <img src={continueProgram.course.image} alt="" className="h-12 w-12 rounded-lg object-cover bg-slate-100 shrink-0"/>
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-lani-green">Continue learning</span>
+                <h3 className="text-sm font-bold text-lani-navy truncate">{continueProgram.course.title}</h3>
+                <div className="mt-1.5 flex items-center gap-2"><div className="progress-bar !h-2 w-32"><span style={{width:`${continueProgram.enrollment.progress}%`}}/></div><span className="text-[10px] font-bold text-slate-500">{continueProgram.enrollment.progress}%</span></div>
+              </div>
+            </div>
+            <button onClick={() => continueProgram.course && onOpenPlayer(continueProgram.course, continueProgram.enrollment)} className="btn-primary min-h-10 px-5 text-xs gap-2 shrink-0"><PlayCircle size={15}/>Resume</button>
+          </div>
+        )}
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-6">
+            {/* Upcoming deadlines */}
+            <div className="rounded-xl border border-slate-200 p-5">
+              <h3 className="text-sm font-bold text-lani-navy mb-4 flex items-center gap-2"><AlertCircle size={15} className="text-lani-coral"/>Upcoming Deadlines</h3>
+              {deadlines.length > 0 ? deadlines.map(d => (
+                <div key={d.id} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-lani-navy truncate">{d.title}</p>
+                    <p className="text-[10px] text-slate-400">{d.courseTitle}</p>
+                  </div>
+                  <div className="text-right shrink-0 ml-3">
+                    <span className="inline-flex rounded-full bg-lani-coral/10 px-2 py-0.5 text-[9px] font-bold text-lani-coral">{d.kind}</span>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{formatDate(d.date)}</p>
+                  </div>
+                </div>
+              )) : <p className="text-xs text-slate-400 py-4 text-center">Nothing due — you're all caught up.</p>}
+            </div>
             {/* Recent Announcements */}
             <div className="rounded-xl border border-slate-200 p-5">
               <h3 className="text-sm font-bold text-lani-navy mb-4 flex items-center gap-2"><Bell size={15} className="text-lani-blue"/>Recent Announcements</h3>
@@ -289,6 +371,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* COURSES TAB */}
@@ -480,6 +563,35 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
         </div>
       )}
 
+      {/* GRADES TAB */}
+      {tab === "grades" && (
+        <div className="table-shell border border-slate-200">
+          {gradeRows.length > 0 ? (
+            <table>
+              <thead><tr><th>Course</th><th>Item</th><th>Type</th><th>Score</th><th>Status</th><th>Date</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {gradeRows.map(g => (
+                  <tr key={g.id}>
+                    <td className="text-xs font-semibold">{g.course}</td>
+                    <td><strong>{g.item}</strong></td>
+                    <td className="text-xs">{g.type}</td>
+                    <td className="font-bold text-lani-navy">{g.score}</td>
+                    <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${g.ok?"bg-lani-emerald/15 text-lani-green":"bg-amber-100 text-amber-700"}`}>{g.status}</span></td>
+                    <td className="text-xs">{g.date ? formatDate(g.date) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="py-20 text-center">
+              <TrendingUp className="mx-auto text-slate-300" size={44}/>
+              <h3 className="mt-4 text-base font-bold text-lani-navy">No grades yet</h3>
+              <p className="mt-1 text-xs text-slate-500">Your quiz results and graded assignments will appear here.</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* DISCUSSION TAB */}
       {tab === "discussion" && (
         <CourseForum
@@ -493,6 +605,12 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
       {/* CERTIFICATES TAB */}
       {tab === "certificates" && (
         <div className="grid gap-4">
+          {certificates.length > 0 && (
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-lani-navy flex items-center gap-2"><Award size={16} className="text-lani-gold"/>My Certificate Wallet <span className="text-xs font-semibold text-slate-400">({certificates.length})</span></h3>
+              <span className="text-[11px] text-slate-400">Open a diploma to print or download it.</span>
+            </div>
+          )}
           {certificates.length > 0 ? certificates.map(cert => (
             <div key={cert.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-all flex justify-between items-center">
               <div className="flex gap-4 items-center">

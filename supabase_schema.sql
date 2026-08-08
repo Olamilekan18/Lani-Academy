@@ -785,3 +785,177 @@ CREATE TRIGGER enforce_role_escalation
 
 -- Optional: seed your first super admin (run once, replace the email).
 -- UPDATE public.profiles SET role = 'super_admin' WHERE email = 'you@lani.ng';
+
+
+-- ============================================================
+-- 28. Corporate (organization) access to sponsored learners
+-- ============================================================
+-- Lets an 'organization' account enrol staff and see the progress of the
+-- learners it sponsored. Access is scoped to the org's own name, matched
+-- against enrollments.sponsor_organisation.
+
+-- Return the caller's organisation name (only for organization accounts).
+-- SECURITY DEFINER so the policy can read profiles without RLS recursion.
+CREATE OR REPLACE FUNCTION public.current_org()
+RETURNS TEXT
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT organisation FROM public.profiles
+  WHERE id = auth.uid() AND role = 'organization'
+  LIMIT 1;
+$$;
+
+-- Enrollments: an org can view + create rows sponsored under its own name.
+DROP POLICY IF EXISTS "Organizations can view their sponsored enrollments" ON public.enrollments;
+CREATE POLICY "Organizations can view their sponsored enrollments" ON public.enrollments
+  FOR SELECT USING (
+    sponsor_organisation IS NOT NULL
+    AND sponsor_organisation = public.current_org()
+  );
+
+DROP POLICY IF EXISTS "Organizations can sponsor enrollments" ON public.enrollments;
+CREATE POLICY "Organizations can sponsor enrollments" ON public.enrollments
+  FOR INSERT WITH CHECK (
+    sponsor_organisation IS NOT NULL
+    AND sponsor_organisation = public.current_org()
+  );
+
+-- Transactions: an org can record + view transactions for its sponsored learners.
+DROP POLICY IF EXISTS "Organizations can record sponsored transactions" ON public.transactions;
+CREATE POLICY "Organizations can record sponsored transactions" ON public.transactions
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.enrollments e
+      WHERE e.course_id = transactions.course_id
+        AND e.learner_email = transactions.learner_email
+        AND e.sponsor_organisation = public.current_org()
+    )
+  );
+
+DROP POLICY IF EXISTS "Organizations can view sponsored transactions" ON public.transactions;
+CREATE POLICY "Organizations can view sponsored transactions" ON public.transactions
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.enrollments e
+      WHERE e.course_id = transactions.course_id
+        AND e.learner_email = transactions.learner_email
+        AND e.sponsor_organisation = public.current_org()
+    )
+  );
+
+
+-- 29. Course ratings & reviews
+-- ============================================================
+-- Learners who are enrolled in a course can leave one star rating + comment.
+-- Reviews are publicly readable so average ratings can show on course cards.
+
+CREATE TABLE IF NOT EXISTS public.course_reviews (
+    id TEXT PRIMARY KEY DEFAULT 'rev-' || encode(gen_random_bytes(6), 'hex'),
+    course_id TEXT REFERENCES public.courses(id) ON DELETE CASCADE,
+    learner_email TEXT NOT NULL,
+    learner_name TEXT NOT NULL,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (course_id, learner_email)
+);
+
+ALTER TABLE public.course_reviews ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Reviews are publicly viewable" ON public.course_reviews;
+CREATE POLICY "Reviews are publicly viewable" ON public.course_reviews
+    FOR SELECT USING (true);
+
+-- A learner may review a course only if they are enrolled in it.
+DROP POLICY IF EXISTS "Enrolled learners can write reviews" ON public.course_reviews;
+CREATE POLICY "Enrolled learners can write reviews" ON public.course_reviews
+    FOR INSERT WITH CHECK (
+        auth.email() = learner_email
+        AND EXISTS (
+            SELECT 1 FROM public.enrollments e
+            WHERE e.course_id = course_reviews.course_id
+              AND e.learner_email = auth.email()
+        )
+    );
+
+DROP POLICY IF EXISTS "Learners can update their own review" ON public.course_reviews;
+CREATE POLICY "Learners can update their own review" ON public.course_reviews
+    FOR UPDATE USING (auth.email() = learner_email);
+
+DROP POLICY IF EXISTS "Learners can delete their own review" ON public.course_reviews;
+CREATE POLICY "Learners can delete their own review" ON public.course_reviews
+    FOR DELETE USING (auth.email() = learner_email);
+
+DROP POLICY IF EXISTS "Admins can manage reviews" ON public.course_reviews;
+CREATE POLICY "Admins can manage reviews" ON public.course_reviews
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE public.profiles.id = auth.uid()
+              AND (public.profiles.role = 'admin' OR public.profiles.role = 'super_admin')
+        )
+    );
+
+CREATE INDEX IF NOT EXISTS idx_course_reviews_course ON public.course_reviews (course_id);
+
+
+-- 30. Lesson bookmarks & notes
+-- ============================================================
+-- Private, per-learner notes and bookmarks attached to a lesson within a course.
+-- Owner-only visibility.
+
+CREATE TABLE IF NOT EXISTS public.lesson_notes (
+    id TEXT PRIMARY KEY DEFAULT 'note-' || encode(gen_random_bytes(6), 'hex'),
+    learner_email TEXT NOT NULL,
+    course_id TEXT REFERENCES public.courses(id) ON DELETE CASCADE,
+    lesson_title TEXT NOT NULL,
+    body TEXT DEFAULT '',
+    bookmarked BOOLEAN DEFAULT false,
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (learner_email, course_id, lesson_title)
+);
+
+ALTER TABLE public.lesson_notes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Learners manage their own notes" ON public.lesson_notes;
+CREATE POLICY "Learners manage their own notes" ON public.lesson_notes
+    FOR ALL USING (auth.email() = learner_email)
+    WITH CHECK (auth.email() = learner_email);
+
+CREATE INDEX IF NOT EXISTS idx_lesson_notes_owner ON public.lesson_notes (learner_email, course_id);
+
+
+-- 31. Admin audit log
+-- ============================================================
+-- Records privileged actions (role changes, course edits/archives, cert revokes,
+-- broadcasts, etc.). Any authenticated user can append; only admins can read.
+
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id TEXT PRIMARY KEY DEFAULT 'aud-' || encode(gen_random_bytes(6), 'hex'),
+    actor_email TEXT,
+    actor_role TEXT,
+    action TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    detail TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Append-only for any signed-in user (actions are logged from the app).
+DROP POLICY IF EXISTS "Authenticated can append audit logs" ON public.audit_logs;
+CREATE POLICY "Authenticated can append audit logs" ON public.audit_logs
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+-- Only admins can read the log.
+DROP POLICY IF EXISTS "Admins can read audit logs" ON public.audit_logs;
+CREATE POLICY "Admins can read audit logs" ON public.audit_logs
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE public.profiles.id = auth.uid()
+              AND (public.profiles.role = 'admin' OR public.profiles.role = 'super_admin')
+        )
+    );
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON public.audit_logs (created_at DESC);

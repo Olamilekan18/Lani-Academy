@@ -3,7 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { Building2, Users, FileText, CheckCircle, Plus, BookOpen, Clock, Loader2, Sparkles } from "lucide-react";
 import type { Course, Enrollment, CorporateLead } from "../lib/types";
-import { dbSaveLead } from "../lib/db";
+import { dbSaveLead, toCamelCaseKeys } from "../lib/db";
 import toast from "react-hot-toast";
 
 interface Props {
@@ -51,9 +51,13 @@ export default function OrganizationDashboard({ courses }: Props) {
       const { data, error } = await supabase
         .from("enrollments")
         .select("*")
-        .eq("sponsor_organisation", orgName);
-      if (!error && data) {
-        setSponsoredLearners(data as Enrollment[]);
+        .eq("sponsor_organisation", orgName)
+        .order("enrolled_at", { ascending: false });
+      if (error) {
+        console.error("Error loading sponsored learners:", error.message);
+      } else if (data) {
+        // DB rows are snake_case — convert to the camelCase Enrollment shape
+        setSponsoredLearners(toCamelCaseKeys(data) as Enrollment[]);
       }
     } catch (err) {
       console.error(err);
@@ -341,12 +345,26 @@ export default function OrganizationDashboard({ courses }: Props) {
                       <th className="p-4">Name / Email</th>
                       <th className="p-4">Program</th>
                       <th className="p-4 text-center">Progress</th>
+                      <th className="p-4 text-center">Status</th>
                       <th className="p-4 text-right">Enrolled At</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                     {sponsoredLearners.map((learner) => {
                       const course = courses.find((c) => c.id === learner.courseId);
+                      // Total lessons across the course, and how many this learner finished
+                      const totalLessons = course?.modules?.reduce((n, m) => n + (m.lessons?.length || 0), 0) || 0;
+                      const doneLessons = (learner.completedLessons || []).filter(
+                        (id) => !id.startsWith("mat:")
+                      ).length;
+                      const pct = learner.progress || 0;
+                      const status = pct >= 100 ? "Completed" : pct > 0 ? "In progress" : "Not started";
+                      const statusClass =
+                        status === "Completed"
+                          ? "bg-emerald-50 text-emerald-600"
+                          : status === "In progress"
+                          ? "bg-blue-50 text-blue-600"
+                          : "bg-slate-100 text-slate-500";
                       return (
                         <tr key={learner.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="p-4">
@@ -357,21 +375,29 @@ export default function OrganizationDashboard({ courses }: Props) {
                             <div className="max-w-[200px] truncate font-bold text-slate-700">
                               {course?.title || learner.courseId}
                             </div>
+                            {totalLessons > 0 && (
+                              <div className="text-[10px] text-slate-400">
+                                {doneLessons}/{totalLessons} lessons
+                              </div>
+                            )}
                           </td>
                           <td className="p-4">
                             <div className="flex items-center justify-center gap-2">
                               <div className="w-16 bg-slate-150 h-1.5 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full ${
-                                    learner.progress === 100 ? "bg-lani-green" : "bg-lani-blue"
+                                    pct === 100 ? "bg-lani-green" : "bg-lani-blue"
                                   }`}
-                                  style={{ width: `${learner.progress}%` }}
+                                  style={{ width: `${pct}%` }}
                                 />
                               </div>
-                              <span className="text-[10px] font-bold text-slate-600">
-                                {learner.progress}%
-                              </span>
+                              <span className="text-[10px] font-bold text-slate-600">{pct}%</span>
                             </div>
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className={`inline-block rounded px-2 py-0.5 text-[9px] font-bold uppercase ${statusClass}`}>
+                              {status}
+                            </span>
                           </td>
                           <td className="p-4 text-right text-[10px] text-slate-400">
                             {learner.enrolledAt}

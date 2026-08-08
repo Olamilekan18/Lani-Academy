@@ -23,7 +23,10 @@ import type {
   AttendanceRecord,
   DiscussionPost,
   Pathway,
-  AnalyticsEvent
+  AnalyticsEvent,
+  CourseReview,
+  LessonNote,
+  AuditLog
 } from "./types";
 import {
   mockQuizzes,
@@ -697,7 +700,85 @@ export async function dbSaveFacilitatorAssignment(assignment: FacilitatorAssignm
   // Also update the course facilitator field
   const { error: cErr } = await supabase.from("courses").update({ facilitator: assignment.facilitatorName }).eq("id", assignment.courseId);
   if (cErr) console.warn("Could not update course facilitator field:", cErr.message);
-  
+
   return true;
+}
+
+// ─── Course reviews ──────────────────────────────────────────
+export async function dbGetReviews(): Promise<CourseReview[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("course_reviews").select("*").order("created_at", { ascending: false });
+  return toCamelCaseKeys(data || []) as CourseReview[];
+}
+
+export async function dbSaveReview(review: Partial<CourseReview>): Promise<boolean> {
+  if (!supabase) return false;
+  // One review per learner per course — upsert on the (course_id, learner_email) unique key.
+  const { error } = await supabase
+    .from("course_reviews")
+    .upsert(toSnakeCaseKeys(review), { onConflict: "course_id,learner_email" });
+  if (error) console.error("Error saving review:", error.message);
+  return !error;
+}
+
+export async function dbDeleteReview(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("course_reviews").delete().eq("id", id);
+  if (error) console.error("Error deleting review:", error.message);
+  return !error;
+}
+
+// ─── Lesson notes & bookmarks ────────────────────────────────
+export async function dbGetNotes(learnerEmail: string): Promise<LessonNote[]> {
+  if (!supabase || !learnerEmail) return [];
+  const { data } = await supabase.from("lesson_notes").select("*").eq("learner_email", learnerEmail);
+  return toCamelCaseKeys(data || []) as LessonNote[];
+}
+
+export async function dbSaveNote(note: Partial<LessonNote>): Promise<boolean> {
+  if (!supabase) return false;
+  const payload = { ...toSnakeCaseKeys(note), updated_at: new Date().toISOString() };
+  const { error } = await supabase
+    .from("lesson_notes")
+    .upsert(payload, { onConflict: "learner_email,course_id,lesson_title" });
+  if (error) console.error("Error saving note:", error.message);
+  return !error;
+}
+
+export async function dbDeleteNote(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("lesson_notes").delete().eq("id", id);
+  if (error) console.error("Error deleting note:", error.message);
+  return !error;
+}
+
+// ─── Audit log ───────────────────────────────────────────────
+export async function dbGetAuditLogs(): Promise<AuditLog[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(2000);
+  return toCamelCaseKeys(data || []) as AuditLog[];
+}
+
+export async function dbLogAudit(entry: {
+  actorEmail?: string | null;
+  actorRole?: string | null;
+  action: string;
+  targetType?: string;
+  targetId?: string;
+  detail?: string;
+}): Promise<void> {
+  if (!supabase) return;
+  try {
+    await supabase.from("audit_logs").insert({
+      actor_email: entry.actorEmail ?? null,
+      actor_role: entry.actorRole ?? null,
+      action: entry.action,
+      target_type: entry.targetType ?? null,
+      target_id: entry.targetId ?? null,
+      detail: entry.detail ?? "",
+    });
+  } catch {
+    /* auditing must never block the app */
+  }
 }
 

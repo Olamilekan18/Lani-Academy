@@ -9,22 +9,40 @@ import {
   BookOpen,
   User,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  Star
 } from "lucide-react";
-import type { Course } from "../lib/types";
+import type { Course, CourseReview } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 
 interface CourseDetailProps {
   course: Course;
+  reviews?: CourseReview[];
+  currentUserEmail?: string;
+  canReview?: boolean;
+  onSaveReview?: (review: Partial<CourseReview>) => Promise<void> | void;
   onEnrol: () => void;
   onBack: () => void;
 }
 
-export default function CourseDetail({ course, onEnrol, onBack }: CourseDetailProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "curriculum" | "objectives" | "audience">("overview");
+export default function CourseDetail({ course, reviews = [], currentUserEmail = "", canReview = false, onSaveReview, onEnrol, onBack }: CourseDetailProps) {
+  const [activeTab, setActiveTab] = useState<"overview" | "curriculum" | "objectives" | "audience" | "reviews">("overview");
   const [expandedModule, setExpandedModule] = useState<number | null>(0);
   const [facProfile, setFacProfile] = useState<any>(null);
+
+  const myReview = reviews.find((r) => r.learnerEmail === currentUserEmail);
+  const [rating, setRating] = useState<number>(myReview?.rating || 0);
+  const [comment, setComment] = useState<string>(myReview?.comment || "");
+  const [submitting, setSubmitting] = useState(false);
+  const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
+
+  const submitReview = async () => {
+    if (!onSaveReview || rating < 1) return;
+    setSubmitting(true);
+    await onSaveReview({ courseId: course.id, rating, comment: comment.trim() });
+    setSubmitting(false);
+  };
 
   React.useEffect(() => {
     if (course.facilitator && supabase) {
@@ -92,17 +110,17 @@ export default function CourseDetail({ course, onEnrol, onBack }: CourseDetailPr
         <div className="space-y-8">
           {/* Tab Selector pill */}
           <div className="flex border-b border-slate-200 text-sm font-bold text-slate-500 overflow-x-auto gap-4">
-            {(["overview", "curriculum", "objectives", "audience"] as const).map((tab) => (
+            {(["overview", "curriculum", "objectives", "audience", "reviews"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`pb-3 border-b-2 px-1 transition-all capitalize ${
+                className={`pb-3 border-b-2 px-1 transition-all capitalize whitespace-nowrap ${
                   activeTab === tab
                     ? "border-lani-green text-lani-green"
                     : "border-transparent hover:text-slate-800"
                 }`}
               >
-                {tab}
+                {tab === "reviews" ? `Reviews${reviews.length ? ` (${reviews.length})` : ""}` : tab}
               </button>
             ))}
           </div>
@@ -202,6 +220,77 @@ export default function CourseDetail({ course, onEnrol, onBack }: CourseDetailPr
                     <div key={aud} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs font-semibold text-slate-700 hover:bg-white transition-all">
                       <BookOpen size={18} className="text-lani-blue shrink-0" />
                       <span>{aud}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "reviews" && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-lg font-bold text-lani-navy tracking-tight">Learner Reviews</h2>
+                  {reviews.length > 0 && (
+                    <span className="flex items-center gap-1.5 text-sm">
+                      <span className="flex items-center gap-0.5 text-lani-gold">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <Star key={n} size={15} className={n <= Math.round(avgRating) ? "fill-lani-gold" : "text-slate-300"} />
+                        ))}
+                      </span>
+                      <strong className="text-slate-700">{avgRating.toFixed(1)}</strong>
+                      <span className="text-slate-400">· {reviews.length} review{reviews.length === 1 ? "" : "s"}</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Write a review — only enrolled learners */}
+                {canReview ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 grid gap-3">
+                    <h3 className="text-sm font-bold text-lani-navy">{myReview ? "Update your review" : "Write a review"}</h3>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button key={n} type="button" onClick={() => setRating(n)} className="p-0.5">
+                          <Star size={22} className={n <= rating ? "fill-lani-gold text-lani-gold" : "text-slate-300 hover:text-lani-gold"} />
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      rows={3}
+                      placeholder="Share what you thought of this course..."
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-lani-green focus:ring-2 focus:ring-lani-green/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={submitReview}
+                      disabled={submitting || rating < 1}
+                      className="btn-primary justify-self-start text-xs px-5 disabled:opacity-50"
+                    >
+                      {submitting ? "Saving..." : myReview ? "Update review" : "Submit review"}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-500">
+                    Only enrolled learners can review this course.
+                  </p>
+                )}
+
+                {/* Reviews list */}
+                <div className="grid gap-3">
+                  {reviews.length === 0 && <p className="text-sm text-slate-500">No reviews yet — be the first to share your experience.</p>}
+                  {reviews.map((r) => (
+                    <div key={r.id} className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <strong className="text-sm text-lani-navy">{r.learnerName}</strong>
+                        <span className="flex items-center gap-0.5 text-lani-gold">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <Star key={n} size={12} className={n <= r.rating ? "fill-lani-gold" : "text-slate-300"} />
+                          ))}
+                        </span>
+                      </div>
+                      {r.comment && <p className="mt-2 text-xs leading-6 text-slate-600">{r.comment}</p>}
+                      <span className="mt-1 block text-[10px] text-slate-400">{formatDate(r.createdAt)}</span>
                     </div>
                   ))}
                 </div>

@@ -42,7 +42,11 @@ function reminderHtml(name: string, courseTitle: string, sessionTitle: string, d
       <p>Hi ${name},</p>
       <p>This is a reminder for your upcoming session in <strong>${courseTitle}</strong>.</p>
       <p><strong>${sessionTitle}</strong><br/>${date} · ${time}${venue ? ` · ${venue}` : ""}</p>
-      <p style="font-size:12px;color:#94a3b8;">LANI Academy · automated reminder.</p>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0 12px;" />
+      <p style="font-size:12px;color:#475569;margin:0 0 4px;font-weight:700;">LANI Academy</p>
+      <p style="font-size:11px;color:#94a3b8;margin:0 0 4px;">4 Olumuyiwa Street, Omole Phase 1, Ikeja, Lagos, Nigeria</p>
+      <p style="font-size:11px;color:#94a3b8;margin:0 0 8px;">info@lani.ng · +234 (0) 800-LANI-ACADEMY</p>
+      <p style="font-size:10px;color:#cbd5e1;margin:0;">Automated session reminder. <a href="mailto:info@lani.ng?subject=Unsubscribe" style="color:#94a3b8;">Unsubscribe</a>.</p>
     </div>
   </div>`;
 }

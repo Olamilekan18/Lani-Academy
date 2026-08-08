@@ -92,9 +92,12 @@ import {
   dbGetPathways,
   dbSavePathway,
   dbDeletePathway,
+  dbGetReviews,
+  dbSaveReview,
   dbMarkNotificationRead,
   dbMarkAllNotificationsRead,
-  dbLogEvent
+  dbLogEvent,
+  dbLogAudit
 } from "./lib/db";
 import { formatMoney } from "./lib/utils";
 import { applySeo } from "./lib/seo";
@@ -129,7 +132,8 @@ import type {
   ContentItem,
   AttendanceRecord,
   DiscussionPost,
-  Pathway
+  Pathway,
+  CourseReview
 } from "./lib/types";
 
 export default function App() {
@@ -155,6 +159,7 @@ export default function App() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [discussions, setDiscussions] = useState<DiscussionPost[]>([]);
   const [pathways, setPathways] = useState<Pathway[]>([]);
+  const [reviews, setReviews] = useState<CourseReview[]>([]);
 
   // Mock data states for LMS features not yet in Supabase
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -222,7 +227,7 @@ export default function App() {
       const dbAssets = await dbGetAssets();
       setAssets(dbAssets);
 
-      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers, dbContent, dbAttendance, dbDiscussions, dbPathways] = await Promise.all([
+      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers, dbContent, dbAttendance, dbDiscussions, dbPathways, dbReviews] = await Promise.all([
         dbGetPromos(),
         dbGetSurveys(),
         dbGetSurveyResponses(),
@@ -231,6 +236,7 @@ export default function App() {
         dbGetAttendance(),
         dbGetDiscussions(),
         dbGetPathways(),
+        dbGetReviews(),
       ]);
       setPromos(dbPromos);
       setSurveys(dbSurveys);
@@ -240,6 +246,7 @@ export default function App() {
       setAttendance(dbAttendance);
       setDiscussions(dbDiscussions);
       setPathways(dbPathways);
+      setReviews(dbReviews);
 
       // Load extended LMS features from Supabase
       const [
@@ -534,6 +541,7 @@ export default function App() {
   const handleAddCourse = async (courseData: Partial<Course>) => {
     try {
       await dbSaveCourse(courseData);
+      logAudit("course.saved", "course", courseData.id, courseData.title || "");
       await loadDatabase();
     } catch (err) {
       console.error(err);
@@ -543,6 +551,7 @@ export default function App() {
   const handleAssignFacilitator = async (assignment: FacilitatorAssignment) => {
     try {
       await dbSaveFacilitatorAssignment(assignment);
+      logAudit("facilitator.assigned", "course", assignment.courseId, `${assignment.facilitatorName} → ${assignment.courseTitle}`);
       await loadDatabase();
     } catch (err) {
       console.error(err);
@@ -602,6 +611,17 @@ export default function App() {
     else toast.error("Could not save assignment.");
   };
 
+  // Record a privileged action to the admin audit log (never blocks the caller)
+  const logAudit = (action: string, targetType?: string, targetId?: string, detail?: string) =>
+    void dbLogAudit({
+      actorEmail: profile?.email || user?.email || null,
+      actorRole: profile?.role || null,
+      action,
+      targetType,
+      targetId,
+      detail,
+    });
+
   const handleBroadcast = async (emails: string[], subject: string, message: string) => {
     const unique = Array.from(
       new Set(emails.map((e) => (e || "").trim().toLowerCase()).filter((e) => e.includes("@")))
@@ -617,6 +637,7 @@ export default function App() {
       if (ok) sent++;
       notify("announcement", subject, message, to); // in-app copy for account holders
     }
+    logAudit("broadcast.sent", "broadcast", undefined, `"${subject}" to ${unique.length} recipient(s)`);
     await loadDatabase();
     if (sent > 0) toast.success(`Broadcast sent to ${sent} recipient(s) (email + in-app).`);
     else toast(`In-app sent to ${unique.length}; connect Resend to also deliver email.`);
@@ -624,6 +645,7 @@ export default function App() {
 
   const handleUpdateCurriculum = async (courseId: string, patch: Partial<Course>) => {
     const ok = await dbUpdateCourse(courseId, patch);
+    if (ok) logAudit("course.updated", "course", courseId, patch.status ? `status → ${patch.status}` : "curriculum/details updated");
     await loadDatabase();
     if (ok) toast.success("Curriculum saved");
     else toast.error("Could not save curriculum.");
@@ -639,6 +661,15 @@ export default function App() {
   const handleDeletePathway = async (id: string) => {
     await dbDeletePathway(id);
     await loadDatabase();
+  };
+
+  const handleSaveReview = async (review: Partial<CourseReview>) => {
+    const learnerEmail = profile?.email || user?.email || "";
+    const learnerName = profile?.full_name || "Learner";
+    const ok = await dbSaveReview({ ...review, learnerEmail, learnerName });
+    await loadDatabase();
+    if (ok) toast.success("Thanks for your review!");
+    else toast.error("Could not save review. You must be enrolled in this course.");
   };
 
   const handleSaveDiscussion = async (post: DiscussionPost) => {
@@ -676,6 +707,7 @@ export default function App() {
 
   const handleUpdateCertificateStatus = async (cert: Certificate, status: Certificate["status"]) => {
     const ok = await dbSaveCertificate({ ...cert, status });
+    if (ok) logAudit(status === "Revoked" ? "certificate.revoked" : "certificate.reissued", "certificate", cert.id, `${cert.learnerName} · ${cert.courseTitle}`);
     await loadDatabase();
     if (ok) toast.success(status === "Revoked" ? "Certificate revoked" : "Certificate reissued");
     else toast.error("Could not update certificate.");
@@ -934,6 +966,10 @@ export default function App() {
           selectedCourse ? (
             <CourseDetail
               course={selectedCourse}
+              reviews={reviews.filter((r) => r.courseId === selectedCourse.id)}
+              currentUserEmail={profile?.email || user?.email || ""}
+              canReview={enrollments.some((e) => e.courseId === selectedCourse.id && e.learnerEmail === (profile?.email || user?.email))}
+              onSaveReview={handleSaveReview}
               onBack={() => { setSelectedCourse(null); navigate("/courses"); }}
               onEnrol={() => {
                 if (!user) {
@@ -956,6 +992,7 @@ export default function App() {
           ) : (
             <Courses
               courses={courses}
+              reviews={reviews}
               wishlist={wishlist}
               onToggleWishlist={handleToggleWishlist}
               onOpenCourse={handleOpenCourse}
@@ -1065,6 +1102,7 @@ export default function App() {
             applications={applications}
             assets={assets}
             facilitators={facilitators}
+            facilitatorAssignments={facilitatorAssignments}
             promos={promos}
             subscribers={subscribers}
             content={content}

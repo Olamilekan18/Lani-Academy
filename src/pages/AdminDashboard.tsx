@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar, Route, Bell } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord, Pathway, AnalyticsEvent } from "../lib/types";
+import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord, Pathway, AnalyticsEvent, AuditLog } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
-import { seedDatabase, dbUploadFile, dbGetAnalyticsEvents } from "../lib/db";
+import { seedDatabase, dbUploadFile, dbGetAnalyticsEvents, dbGetAuditLogs } from "../lib/db";
 import CourseEditor from "../components/CourseEditor";
 import SessionScheduler from "../components/SessionScheduler";
 import toast from "react-hot-toast";
 
-type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"content"|"pathways"|"sessions"|"promos"|"broadcast";
+type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"content"|"pathways"|"sessions"|"promos"|"broadcast"|"audit";
 
 interface Props {
   courses: Course[];
@@ -19,6 +19,7 @@ interface Props {
   applications: ProgrammeApplication[];
   assets: CmsAsset[];
   facilitators: {fullName: string, email: string}[];
+  facilitatorAssignments: FacilitatorAssignment[];
   promos: PromoCode[];
   subscribers: string[];
   content: ContentItem[];
@@ -47,7 +48,7 @@ interface Props {
 
 const COLORS = ["#087443","#0b66c3","#c9972b","#d95845","#10a768","#6366f1","#ec4899","#14b8a6"];
 
-export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, promos, subscribers, content, calendarEvents, attendance, onSaveAttendance, pathways, onSavePathway, onDeletePathway, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onSaveEvent, onDeleteEvent, onUpdateLeadStage, onUpdateAppStatus, onConvertApplicant, onUpdateCertificateStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
+export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, facilitatorAssignments, promos, subscribers, content, calendarEvents, attendance, onSaveAttendance, pathways, onSavePathway, onDeletePathway, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onSaveEvent, onDeleteEvent, onUpdateLeadStage, onUpdateAppStatus, onConvertApplicant, onUpdateCertificateStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-admin-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
@@ -67,6 +68,8 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   useEffect(() => { dbGetAnalyticsEvents().then(setEvents).catch(() => {}); }, []);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  useEffect(() => { if (tab === "audit") dbGetAuditLogs().then(setAuditLogs).catch(() => {}); }, [tab]);
   const viewCount = events.filter(e => e.type === "view").length;
   const startCount = events.filter(e => e.type === "checkout_start").length;
   const completeCount = events.filter(e => e.type === "checkout_complete").length;
@@ -251,6 +254,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     {key:"sessions",label:"Sessions",icon:Calendar,count:calendarEvents.length},
     {key:"promos",label:"Promo Codes",icon:Tag,count:promos.length},
     {key:"broadcast",label:"Broadcast",icon:Send},
+    {key:"audit",label:"Audit Log",icon:ClipboardCheck},
   ];
 
   // Broadcast email state
@@ -576,13 +580,16 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
               </div>
               <div className="table-shell border border-slate-200">
                 <table>
-                  <thead><tr><th>Course</th><th>Curriculum</th><th>Price</th><th>Enrolled</th><th>Status</th><th>Actions</th></tr></thead>
+                  <thead><tr><th>Course</th><th>Facilitator</th><th>Curriculum</th><th>Price</th><th>Enrolled</th><th>Status</th><th>Actions</th></tr></thead>
                   <tbody className="divide-y divide-slate-100">
                     {courses.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase())||c.code.toLowerCase().includes(searchTerm.toLowerCase())).map(c => {
                       const lessons = (c.modules || []).reduce((n, m) => n + (m.lessons?.length || 0), 0);
+                      const assigned = facilitatorAssignments.filter(a => a.courseId === c.id).map(a => a.facilitatorName);
+                      const facilitatorLabel = assigned.length ? assigned.join(", ") : (c.facilitator && c.facilitator !== "TBD" ? c.facilitator : "—");
                       return (
                       <tr key={c.id}>
                         <td><strong>{c.title}</strong><span>{c.code} • {c.thematicArea}</span></td>
+                        <td className="text-xs">{facilitatorLabel === "—" ? <span className="text-slate-400">Unassigned</span> : <span className="font-semibold text-lani-navy">{facilitatorLabel}</span>}</td>
                         <td className="text-xs">{(c.modules||[]).length} modules · {lessons} lessons</td>
                         <td className="font-bold text-lani-navy">{formatMoney(c.price)}</td>
                         <td><span className="text-xs font-bold">{c.enrolled}/{c.seats}</span></td>
@@ -617,7 +624,12 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
 
       {/* LEARNERS */}
       {tab === "learners" && (
-        <div className="table-shell border border-slate-200">
+        <div>
+          <div className="mb-4 flex items-center">
+            <span className="text-xs font-bold text-slate-500">{enrollments.length} enrolment{enrollments.length===1?"":"s"}</span>
+            <button className="ml-auto btn-secondary min-h-9 px-3 text-xs gap-1" onClick={() => exportCsv("lani-learners.csv", enrollments.map(e => ({ learner:e.learnerName, email:e.learnerEmail, course:(courses.find(c=>c.id===e.courseId)?.title)||e.courseId, progress:`${e.progress}%`, payment:e.paymentStatus, sponsor:e.sponsorOrganisation||"", enrolled:e.enrolledAt })))}><Download size={13}/>Export CSV</button>
+          </div>
+          <div className="table-shell border border-slate-200">
           <table>
             <thead><tr><th>Learner</th><th>Course</th><th>Progress</th><th>Payment</th><th>Enrolled</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
@@ -636,6 +648,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
             </tbody>
           </table>
           {enrollments.length===0&&<div className="py-16 text-center"><Users className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No Enrollments</h3></div>}
+          </div>
         </div>
       )}
 
@@ -693,7 +706,14 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
 
       {/* APPLICATIONS */}
       {tab === "applications" && (
-        <div className="table-shell border border-slate-200">
+        <div>
+          {applications.length > 0 && (
+            <div className="mb-4 flex items-center">
+              <span className="text-xs font-bold text-slate-500">{applications.length} application{applications.length===1?"":"s"}</span>
+              <button className="ml-auto btn-secondary min-h-9 px-3 text-xs gap-1" onClick={() => exportCsv("lani-applications.csv", applications.map(a => ({ applicant:a.applicantName, email:a.email, phone:a.phone, location:a.location, organisation:a.organisation, programme:a.programmeType, status:a.status, score:a.score, submitted:a.createdAt })))}><Download size={13}/>Export CSV</button>
+            </div>
+          )}
+          <div className="table-shell border border-slate-200">
           {applications.length > 0 ? (
             <table>
               <thead><tr><th>Applicant</th><th>Programme</th><th>Docs</th><th>Status</th><th>Action</th></tr></thead>
@@ -720,6 +740,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
               </tbody>
             </table>
           ) : <div className="py-16 text-center"><ClipboardCheck className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No Applications</h3></div>}
+          </div>
         </div>
       )}
 
@@ -985,6 +1006,34 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
             </div>
             <p className="text-[11px] text-slate-400">Emails are delivered via the send-email function (Resend). Until it's connected, this records intent without sending.</p>
           </form>
+        </div>
+      )}
+
+      {/* AUDIT LOG */}
+      {tab === "audit" && (
+        <div>
+          <div className="mb-4 flex items-center">
+            <span className="text-xs font-bold text-slate-500">{auditLogs.length} recorded action{auditLogs.length===1?"":"s"}</span>
+            <button className="ml-auto btn-secondary min-h-9 px-3 text-xs gap-1" onClick={() => exportCsv("lani-audit-log.csv", auditLogs.map(a => ({ when:a.createdAt, actor:a.actorEmail||"", role:a.actorRole||"", action:a.action, target_type:a.targetType||"", target_id:a.targetId||"", detail:a.detail })))}><Download size={13}/>Export CSV</button>
+          </div>
+          <div className="table-shell border border-slate-200">
+            {auditLogs.length > 0 ? (
+              <table>
+                <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {auditLogs.map(a => (
+                    <tr key={a.id}>
+                      <td className="text-xs whitespace-nowrap">{new Date(a.createdAt).toLocaleString()}</td>
+                      <td><strong>{a.actorEmail||"System"}</strong><span>{a.actorRole||""}</span></td>
+                      <td><span className="inline-flex rounded-full bg-lani-blue/10 px-2 py-0.5 text-[10px] font-bold text-lani-blue">{a.action}</span></td>
+                      <td className="text-xs">{a.targetType ? `${a.targetType}${a.targetId?` · ${a.targetId}`:""}` : "—"}</td>
+                      <td className="text-xs text-slate-600 max-w-[280px] truncate" title={a.detail}>{a.detail || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <div className="py-16 text-center"><ClipboardCheck className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No audit entries yet</h3><p className="mt-1 text-xs text-slate-400">Role changes, course archives, certificate revocations and broadcasts will appear here.</p></div>}
+          </div>
         </div>
       )}
 

@@ -45,6 +45,9 @@ export type ThematicArea = {
 export type CourseModule = {
   title: string;
   lessons: string[];
+  materials?: { name: string; url: string }[];
+  // Per-lesson downloadable materials, keyed by lesson title.
+  lessonMaterials?: Record<string, { name: string; url: string }[]>;
 };
 
 export type Course = {
@@ -87,6 +90,7 @@ export type Enrollment = {
   completedLessons: string[];
   paymentStatus: "Successful" | "Pending" | "Manual Review";
   enrolledAt: string;
+  sponsorOrganisation?: string;
 };
 
 export type Transaction = {
@@ -350,5 +354,36 @@ export type ContentItem = {
   fileUrl: string;
   author: string;
   published: boolean;
+  createdAt: string;
+};
+
+export type CourseReview = {
+  id: string;
+  courseId: string;
+  learnerEmail: string;
+  learnerName: string;
+  rating: number; // 1–5
+  comment: string;
+  createdAt: string;
+};
+
+export type LessonNote = {
+  id: string;
+  learnerEmail: string;
+  courseId: string;
+  lessonTitle: string;
+  body: string;
+  bookmarked: boolean;
+  updatedAt: string;
+};
+
+export type AuditLog = {
+  id: string;
+  actorEmail: string | null;
+  actorRole: string | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  detail: string;
   createdAt: string;
 };

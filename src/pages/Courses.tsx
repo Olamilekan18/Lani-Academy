@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Search, Filter, BookOpen, Star, RefreshCw, Bookmark } from "lucide-react";
-import type { Course } from "../lib/types";
+import type { Course, CourseReview } from "../lib/types";
 import { formatMoney } from "../lib/utils";
 
 interface CoursesProps {
   courses: Course[];
+  reviews?: CourseReview[];
   wishlist: string[];
   onToggleWishlist: (courseId: string) => void;
   onOpenCourse: (course: Course) => void;
@@ -13,6 +14,7 @@ interface CoursesProps {
 
 export default function Courses({
   courses,
+  reviews = [],
   wishlist,
   onToggleWishlist,
   onOpenCourse,
@@ -22,6 +24,20 @@ export default function Courses({
   const [selectedArea, setSelectedArea] = useState("All Thematic Areas");
   const [selectedMode, setSelectedMode] = useState("All Delivery Modes");
   const [selectedLevel, setSelectedLevel] = useState("All Skill Levels");
+  const [sortBy, setSortBy] = useState("featured");
+
+  // Average rating + count per course id
+  const ratingByCourse = useMemo(() => {
+    const acc: Record<string, { sum: number; count: number }> = {};
+    for (const r of reviews) {
+      if (!acc[r.courseId]) acc[r.courseId] = { sum: 0, count: 0 };
+      acc[r.courseId].sum += r.rating;
+      acc[r.courseId].count += 1;
+    }
+    const out: Record<string, { avg: number; count: number }> = {};
+    for (const id in acc) out[id] = { avg: acc[id].sum / acc[id].count, count: acc[id].count };
+    return out;
+  }, [reviews]);
 
   // Options list
   const deliveryModes = [
@@ -55,11 +71,21 @@ export default function Courses({
     return matchesSearch && matchesArea && matchesMode && matchesLevel;
   });
 
+  // Sorting
+  const sortedCourses = [...filteredCourses].sort((a, b) => {
+    if (sortBy === "price-asc") return a.price - b.price;
+    if (sortBy === "price-desc") return b.price - a.price;
+    if (sortBy === "rating") return (ratingByCourse[b.id]?.avg || 0) - (ratingByCourse[a.id]?.avg || 0);
+    // featured (default): featured first
+    return Number(b.featured) - Number(a.featured);
+  });
+
   const handleClearFilters = () => {
     setSearch("");
     setSelectedArea("All Thematic Areas");
     setSelectedMode("All Delivery Modes");
     setSelectedLevel("All Skill Levels");
+    setSortBy("featured");
   };
 
   return (
@@ -147,13 +173,29 @@ export default function Courses({
             </div>
           </div>
 
-          <button
-            onClick={handleClearFilters}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-lani-blue transition-colors"
-          >
-            <RefreshCw size={13} />
-            Reset All Filters
-          </button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+              Sort:
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-lani-navy outline-none"
+              >
+                <option value="featured">Featured</option>
+                <option value="rating">Top rated</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+              </select>
+            </label>
+
+            <button
+              onClick={handleClearFilters}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-lani-blue transition-colors"
+            >
+              <RefreshCw size={13} />
+              Reset
+            </button>
+          </div>
         </div>
       </div>
 
@@ -168,11 +210,12 @@ export default function Courses({
       </div>
 
       {/* Courses Grid */}
-      {filteredCourses.length > 0 ? (
+      {sortedCourses.length > 0 ? (
         <div className="course-grid">
-          {filteredCourses.map((course) => {
+          {sortedCourses.map((course) => {
             const isWished = wishlist.includes(course.id);
             const seatsLeft = Math.max(0, course.seats - course.enrolled);
+            const rating = ratingByCourse[course.id];
 
             return (
               <article key={course.id} className="course-card relative">
@@ -222,6 +265,18 @@ export default function Courses({
                   >
                     {course.title}
                   </h3>
+
+                  {rating && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs">
+                      <span className="flex items-center gap-0.5 text-lani-gold">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <Star key={n} size={12} className={n <= Math.round(rating.avg) ? "fill-lani-gold" : "text-slate-300"} />
+                        ))}
+                      </span>
+                      <span className="font-bold text-slate-600">{rating.avg.toFixed(1)}</span>
+                      <span className="text-slate-400">({rating.count})</span>
+                    </div>
+                  )}
                   
                   <p className="mt-2.5 flex-1 text-xs leading-6 text-slate-500">
                     {course.shortDescription}

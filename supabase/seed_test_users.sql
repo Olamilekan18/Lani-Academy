@@ -2,13 +2,14 @@
 -- LANI Academy — Seed test users (one per role)
 -- ============================================================
 -- Run this in the Supabase SQL Editor.
--- Creates three confirmed email/password accounts so you can log in
--- and test the Learner, Facilitator and Admin portals immediately.
+-- Creates four confirmed email/password accounts so you can log in
+-- and test the Learner, Facilitator, Admin and Corporate portals immediately.
 -- Safe to re-run: it deletes and recreates the test accounts each time.
 --
---   Learner      →  learner@lani.test      /  Learner123!
---   Facilitator  →  facilitator@lani.test  /  Facilitator123!
---   Admin        →  admin@lani.test        /  Admin123!
+--   Learner      →  learner@lani.test        /  Learner123!
+--   Facilitator  →  facilitator@lani.test    /  Facilitator123!
+--   Admin        →  admin@lani.test          /  Admin123!
+--   Organization →  organization@lani.test   /  Organization123!
 --
 -- ⚠️  These are TEST credentials. Change the passwords (or delete these
 --     users) before using this project in production.
@@ -18,7 +19,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Remove any existing copies (cascades to profiles + identities)
 DELETE FROM auth.users
-WHERE email IN ('learner@lani.test', 'facilitator@lani.test', 'admin@lani.test');
+WHERE email IN ('learner@lani.test', 'facilitator@lani.test', 'admin@lani.test', 'organization@lani.test');
 
 -- Helper: create a confirmed email/password user (+ matching identity)
 CREATE OR REPLACE FUNCTION public.__seed_user(p_email text, p_password text, p_name text)
@@ -53,9 +54,10 @@ BEGIN
 END $$;
 
 -- Create the three accounts (the handle_new_user trigger creates their profiles)
-SELECT public.__seed_user('learner@lani.test',     'Learner123!',     'Test Learner');
-SELECT public.__seed_user('facilitator@lani.test', 'Facilitator123!', 'Test Facilitator');
-SELECT public.__seed_user('admin@lani.test',        'Admin123!',       'Test Admin');
+SELECT public.__seed_user('learner@lani.test',      'Learner123!',      'Test Learner');
+SELECT public.__seed_user('facilitator@lani.test',  'Facilitator123!',  'Test Facilitator');
+SELECT public.__seed_user('admin@lani.test',         'Admin123!',        'Test Admin');
+SELECT public.__seed_user('organization@lani.test', 'Organization123!', 'Test Corporate Admin');
 
 -- Assign roles (profiles are created as 'learner' by default)
 UPDATE public.profiles
@@ -68,6 +70,11 @@ UPDATE public.profiles
    SET role = 'super_admin'
  WHERE email = 'admin@lani.test';
 
+UPDATE public.profiles
+   SET role = 'organization',
+       organisation = 'Acme Corporation (test account)'
+ WHERE email = 'organization@lani.test';
+
 -- learner@lani.test intentionally stays 'learner'
 
 -- Tidy up the helper
@@ -75,5 +82,5 @@ DROP FUNCTION public.__seed_user(text, text, text);
 
 -- Verify
 SELECT email, role, full_name FROM public.profiles
-WHERE email IN ('learner@lani.test', 'facilitator@lani.test', 'admin@lani.test')
+WHERE email IN ('learner@lani.test', 'facilitator@lani.test', 'admin@lani.test', 'organization@lani.test')
 ORDER BY role;

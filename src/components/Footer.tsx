@@ -52,6 +52,7 @@ export default function Footer({ onNavigate }: FooterProps) {
                 { label: "Learning Pathways", view: "pathways" },
                 { label: "Certification", view: "certification" },
                 { label: "Corporate Training B2B", view: "corporate" },
+                { label: "Corporate Portal Login", view: "organization" },
                 { label: "Scholarship Applications", view: "applications" },
                 { label: "Certificate Verification", view: "verify" },
               ] as { label: string; view: View }[]).map((l) => (

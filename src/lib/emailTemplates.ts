@@ -2,24 +2,69 @@
 // Dependency-free so each can be passed straight to the send-email Edge Function
 // (Resend). Every builder returns { subject, html }.
 
-const BRAND = "#087443";
-const EMERALD = "#10a768";
-const NAVY = "#0f2442";
-const GOLD = "#c9972b";
+// ── Brand configuration — edit these in one place ───────────
+// When you have a logo, set LOGO_URL to a hosted PNG/SVG and it replaces
+// the text wordmark automatically. Update contact/social details to taste.
+export const BRAND_CFG = {
+  name: "LANI Academy",
+  logoUrl: "", // e.g. "https://yourdomain.com/logo.png" — falls back to wordmark when empty
+  logoHeight: 34,
+  colors: { brand: "#087443", emerald: "#10a768", navy: "#0f2442", gold: "#c9972b" },
+  address: "4 Olumuyiwa Street, Off Babington Ashaye Crescent, Omole Phase 1, Ikeja, Lagos, Nigeria",
+  email: "info@lani.ng",
+  phone: "+234 (0) 800-LANI-ACADEMY",
+  website: "https://lani.ng",
+  social: [
+    { label: "Website", url: "https://lani.ng" },
+    { label: "LinkedIn", url: "https://www.linkedin.com/company/lani-group" },
+    { label: "Instagram", url: "https://www.instagram.com/laniacademy" },
+  ],
+  unsubscribeUrl: "mailto:info@lani.ng?subject=Unsubscribe",
+};
+
+const BRAND = BRAND_CFG.colors.brand;
+const EMERALD = BRAND_CFG.colors.emerald;
+const NAVY = BRAND_CFG.colors.navy;
+const GOLD = BRAND_CFG.colors.gold;
+
+function headerMark(): string {
+  if (BRAND_CFG.logoUrl) {
+    return `<img src="${BRAND_CFG.logoUrl}" alt="${BRAND_CFG.name}" style="height:${BRAND_CFG.logoHeight}px;display:inline-block;" />`;
+  }
+  return `<span style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.5px;">LANI</span>` +
+    `<span style="color:${GOLD};font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-left:6px;">Academy</span>`;
+}
+
+function footer(): string {
+  const socials = BRAND_CFG.social
+    .map((s) => `<a href="${s.url}" style="color:${BRAND};text-decoration:none;font-weight:600;margin-right:12px;">${s.label}</a>`)
+    .join("");
+  return `
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0 16px;" />
+    <p style="font-size:12px;color:#475569;margin:0 0 6px;font-weight:700;">${BRAND_CFG.name}</p>
+    <p style="font-size:11px;color:#94a3b8;margin:0 0 4px;line-height:1.6;">${BRAND_CFG.address}</p>
+    <p style="font-size:11px;color:#94a3b8;margin:0 0 10px;">
+      <a href="mailto:${BRAND_CFG.email}" style="color:#94a3b8;">${BRAND_CFG.email}</a> &nbsp;·&nbsp; ${BRAND_CFG.phone}
+    </p>
+    <p style="font-size:11px;margin:0 0 10px;">${socials}</p>
+    <p style="font-size:10px;color:#cbd5e1;margin:0;line-height:1.6;">
+      You're receiving this because you have an account or enrolment with ${BRAND_CFG.name}.
+      <a href="${BRAND_CFG.unsubscribeUrl}" style="color:#94a3b8;">Unsubscribe</a>.
+      This is an automated message — please do not reply.
+    </p>`;
+}
 
 function shell(title: string, bodyHtml: string): string {
   return `
   <div style="margin:0;padding:0;background:#f1f5f9;font-family:Inter,Segoe UI,Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:24px;">
       <div style="background:${NAVY};border-radius:16px 16px 0 0;padding:24px 28px;">
-        <span style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.5px;">LANI</span>
-        <span style="color:${GOLD};font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-left:6px;">Academy</span>
+        ${headerMark()}
       </div>
       <div style="background:#fff;border-radius:0 0 16px 16px;padding:28px;color:#334155;font-size:14px;line-height:1.7;">
         <h1 style="margin:0 0 12px;color:${NAVY};font-size:20px;">${title}</h1>
         ${bodyHtml}
-        <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;" />
-        <p style="font-size:12px;color:#94a3b8;margin:0;">LANI Academy · Nigeria · Ghana · Kenya · Uganda<br/>This is an automated message — please do not reply.</p>
+        ${footer()}
       </div>
     </div>
   </div>`;

@@ -79,6 +79,8 @@ export default function Navbar({ currentView, onNavigate }: NavbarProps) {
   const mobileExtra: NavItem[] = ([
     { label: "Verify Certificate", view: "verify" },
     { label: "Contact", view: "contact" },
+    // Only surface the Corporate portal login to signed-out visitors
+    ...(!userRole ? [{ label: "Corporate Portal Login", view: "organization" as View }] : []),
   ] as NavItem[]).filter((m) => !navItems.some((n) => n.view === m.view));
 
   const dashboardView: View | null =
