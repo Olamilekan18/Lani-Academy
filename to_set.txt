@@ -1,0 +1,19 @@
+PAYSTACK_SECRET_KEY	Verify Paystack charges	Real payment verification
+FLUTTERWAVE_SECRET_KEY	Verify Flutterwave charges	Real payment verification
+RESEND_API_KEY	Send email	Emails + 2FA codes
+EMAIL_FROM	Verified sender, e.g. "LANI Academy <noreply@lani.ng>"	Emails
+ALLOWED_ORIGINS	e.g. https://lani.ng,https://www.lani.ng	CORS lock on all functions
+OTP_PEPPER	Any long random string	Extra 2FA hash secret
+
+SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY are injected automatically — you don't set those.
+
+5. Client .env (public keys only — already in .env.example)
+VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+VITE_PAYSTACK_PUBLIC_KEY, VITE_FLUTTERWAVE_PUBLIC_KEY
+VITE_ENABLE_2FA=true (only after RESEND_API_KEY is set, or codes can't be delivered)
+6. In the Supabase dashboard (Auth settings)
+Turn on leaked-password protection and raise the minimum password length.
+Seed your first admin once: UPDATE public.profiles SET role='super_admin' WHERE email='you@lani.ng'; (self-service role changes are now blocked, so this must be done here).
+Important behavior notes
+Until you set the gateway secret keys, payment verification can't run, so checkout falls through in demo/test mode (nothing is charged, but enrolment is still granted). It becomes strictly enforced the moment the secrets exist.
+One thing I did not fix (flagged in the report): certificate issuance on course completion is blocked by RLS (admins-only insert), so it fails silently today. It needs the same server-side treatment as enrolment. Want me to build a issue-certificate edge function next?

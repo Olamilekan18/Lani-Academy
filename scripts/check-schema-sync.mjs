@@ -70,7 +70,27 @@ const extractObjects = (sql) => {
   return found;
 };
 
-const consolidated = extractObjects(stripComments(readFileSync(consolidatedPath, "utf8")));
+// Extract objects that the consolidated file explicitly DROPs (and does not
+// re-create). These are intentionally removed/renamed, so a migration that
+// created them is still reconciled — the current schema simply no longer has them.
+const extractDropped = (sql) => {
+  const dropped = new Set();
+  const norm = (s) => s.replace(/"/g, "").replace(/^public\./, "").toLowerCase();
+  const reDropPolicy = /drop\s+policy\s+(?:if\s+exists\s+)?("[^"]+"|[a-z0-9_]+)\s+on\s+([a-z0-9_."]+)/gi;
+  let m;
+  while ((m = reDropPolicy.exec(sql)) !== null) {
+    dropped.add(`policy:${norm(m[2])}.${norm(m[1])}`);
+  }
+  return dropped;
+};
+
+const consolidatedSql = stripComments(readFileSync(consolidatedPath, "utf8"));
+const consolidated = extractObjects(consolidatedSql);
+const consolidatedDropped = extractDropped(consolidatedSql);
+// An object that is dropped and NOT re-created is intentionally gone.
+for (const o of consolidatedDropped) {
+  if (!consolidated.has(o)) consolidated.add(o);
+}
 
 const migrationFiles = readdirSync(migrationsDir)
   .filter((f) => f.endsWith(".sql"))

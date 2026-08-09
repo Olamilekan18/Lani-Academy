@@ -333,6 +333,138 @@ export async function dbSendEmail(to: string, subject: string, html: string): Pr
   }
 }
 
+// Verifies a payment server-side against the gateway (via the verify-payment
+// Edge Function, which holds the secret key). Never trust the client callback
+// alone. Returns { verified, configured, amount?, reason? }.
+export interface PaymentVerification {
+  verified: boolean;
+  configured: boolean;
+  amount?: number;
+  currency?: string;
+  status?: string;
+  reason?: string;
+}
+
+export async function dbVerifyPayment(
+  gateway: "Paystack" | "Flutterwave" | "Bank Transfer",
+  reference: string,
+  expectedAmount?: number
+): Promise<PaymentVerification> {
+  // Bank transfers are confirmed manually by an admin, not via gateway API.
+  if (gateway === "Bank Transfer") return { verified: false, configured: false, reason: "Manual confirmation" };
+  if (!supabase) return { verified: false, configured: false, reason: "Supabase not configured" };
+  try {
+    const { data, error } = await supabase.functions.invoke("verify-payment", {
+      body: { gateway, reference, expectedAmount },
+    });
+    if (error) {
+      console.warn("Payment verification unavailable:", error.message);
+      return { verified: false, configured: false, reason: error.message };
+    }
+    return data as PaymentVerification;
+  } catch (e) {
+    console.warn("Payment verification failed:", e);
+    return { verified: false, configured: false, reason: String(e) };
+  }
+}
+
+// Issues a completion certificate SERVER-SIDE (via the issue-certificate Edge
+// Function, service role). Certificates are admin-only at the RLS level, so
+// learners cannot self-insert; the function checks progress = 100% first.
+export interface IssueCertResult {
+  ok: boolean;
+  certificate?: Certificate;
+  alreadyIssued?: boolean;
+  reason?: string;
+}
+
+export async function dbIssueCertificate(courseId: string): Promise<IssueCertResult> {
+  if (!supabase) return { ok: false, reason: "Supabase not configured" };
+  try {
+    const { data, error } = await supabase.functions.invoke("issue-certificate", {
+      body: { courseId },
+    });
+    if (error) return { ok: false, reason: error.message };
+    const res = data as { ok: boolean; certificate?: unknown; alreadyIssued?: boolean; reason?: string };
+    return {
+      ok: res.ok,
+      certificate: res.certificate ? (toCamelCaseKeys(res.certificate) as Certificate) : undefined,
+      alreadyIssued: res.alreadyIssued,
+      reason: res.reason,
+    };
+  } catch (e) {
+    return { ok: false, reason: String(e) };
+  }
+}
+
+// Creates the enrolment + transaction SERVER-SIDE (via the enroll Edge
+// Function, service role) after verifying payment. This is the only path for a
+// learner to enrol — the client can no longer insert enrolment rows directly.
+export interface EnrollResult {
+  ok: boolean;
+  enrollment?: Enrollment;
+  transaction?: Transaction;
+  alreadyEnrolled?: boolean;
+  reason?: string;
+}
+
+export async function dbEnroll(
+  courseId: string,
+  gateway: "Paystack" | "Flutterwave" | "Bank Transfer",
+  reference?: string
+): Promise<EnrollResult> {
+  if (!supabase) return { ok: false, reason: "Supabase not configured" };
+  try {
+    const { data, error } = await supabase.functions.invoke("enroll", {
+      body: { courseId, gateway, reference },
+    });
+    if (error) {
+      // Try to surface the function's JSON error message when present.
+      let reason = error.message;
+      try {
+        const ctx = (error as { context?: { json?: () => Promise<{ reason?: string }> } }).context;
+        const body = ctx?.json ? await ctx.json() : undefined;
+        if (body?.reason) reason = body.reason;
+      } catch { /* ignore */ }
+      return { ok: false, reason };
+    }
+    const res = data as { ok: boolean; enrollment?: unknown; transaction?: unknown; alreadyEnrolled?: boolean; reason?: string };
+    return {
+      ok: res.ok,
+      enrollment: res.enrollment ? (toCamelCaseKeys(res.enrollment) as Enrollment) : undefined,
+      transaction: res.transaction ? (toCamelCaseKeys(res.transaction) as Transaction) : undefined,
+      alreadyEnrolled: res.alreadyEnrolled,
+      reason: res.reason,
+    };
+  } catch (e) {
+    return { ok: false, reason: String(e) };
+  }
+}
+
+// Sends a fixed, server-rendered template. Safe for unauthenticated flows
+// (public contact/lead forms) because the content can't be attacker-controlled.
+// Allowed templates: "welcome", "lead_ack", "otp".
+export async function dbSendTemplateEmail(
+  to: string,
+  template: "welcome" | "lead_ack" | "otp",
+  data: Record<string, unknown>
+): Promise<boolean> {
+  if (!supabase || !to) return false;
+  try {
+    const { error } = await supabase.functions.invoke("send-email", {
+      body: { to, template, data },
+    });
+    if (error) {
+      console.warn("Template email not sent:", error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn("Email function unavailable:", e);
+    return false;
+  }
+}
+
 // Upload a file to the public "media" storage bucket and return its public URL.
 export async function dbUploadFile(file: File, folder = "assets"): Promise<string | null> {
   if (!supabase) return null;

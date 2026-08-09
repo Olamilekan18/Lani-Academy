@@ -106,11 +106,15 @@ export default function CheckoutModal({
   const finalise = async (gw: Gateway, ref: string) => {
     setLoading(true);
     try {
+      // The enrolment is granted server-side only after the gateway confirms
+      // the charge (audit remediation C2). onPaymentComplete throws with a
+      // reason if verification/enrolment fails.
       await onPaymentComplete(gw, ref, finalAmount);
       setReference(ref);
       setStep("success");
-    } catch {
-      setError("Payment succeeded but saving your enrolment failed. Please contact support with your reference.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      setError(msg || `We couldn't complete your enrolment. If you were charged, contact support with reference ${ref}.`);
     } finally {
       setLoading(false);
     }

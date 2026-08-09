@@ -42,7 +42,8 @@ import {
   dbGetApplications,
   dbGetAssets,
   dbSaveEnrollment,
-  dbSaveTransaction,
+  dbEnroll,
+  dbIssueCertificate,
   dbSaveCertificate,
   dbUpdateEnrollmentProgress,
   dbUpdateLeadStage,
@@ -174,6 +175,7 @@ export default function App() {
 
   // Detailed view states
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [courseDetailTab, setCourseDetailTab] = useState<string | undefined>(undefined);
   const [activeVerifyId, setActiveVerifyId] = useState<string>("");
 
   // Modals state
@@ -348,8 +350,9 @@ export default function App() {
   };
 
   // Open course page
-  const handleOpenCourse = (course: Course) => {
+  const handleOpenCourse = (course: Course, tab?: string) => {
     setSelectedCourse(course);
+    setCourseDetailTab(tab);
     void dbLogEvent("view", course.id);
     navigate("/courses");
   };
@@ -362,62 +365,34 @@ export default function App() {
   ) => {
     if (!selectedCourse) return;
 
-    const enrollmentId = "enr-" + Math.random().toString(36).substring(2, 8);
-    const transactionId = "txn-" + Math.random().toString(36).substring(2, 8);
-    const learnerEmail = profile?.email || user?.email || "learner@lani.academy";
+    const learnerEmail = profile?.email || user?.email || "";
     const learnerName = profile?.full_name || "Learner";
-    const paidAmount = amount ?? selectedCourse.price;
 
-    const enrollment: Enrollment = {
-      id: enrollmentId,
-      courseId: selectedCourse.id,
-      learnerEmail,
-      learnerName,
-      enrolledAt: new Date().toISOString().split("T")[0],
-      progress: 0,
-      completedLessons: [],
-      paymentStatus: gateway === "Bank Transfer" ? "Pending" : "Successful",
-    };
-
-    const transaction: Transaction = {
-      id: transactionId,
-      courseId: selectedCourse.id,
-      learnerEmail,
-      receiptNumber: reference || "LANI-REC-" + Math.floor(100000 + Math.random() * 900000),
-      gateway,
-      amount: paidAmount,
-      status: gateway === "Bank Transfer" ? "Pending" : "Successful",
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-
-    try {
-      // 1. Save to Supabase
-      await dbSaveEnrollment(enrollment);
-      await dbSaveTransaction(transaction);
-      void dbLogEvent("checkout_complete", selectedCourse.id, learnerEmail);
-
-      // 2. Send confirmation email (no-op if email isn't configured)
-      const mail = paymentConfirmationEmail(
-        learnerName,
-        selectedCourse.title,
-        formatMoney(paidAmount),
-        transaction.receiptNumber,
-        gateway === "Bank Transfer"
-      );
-      void dbSendEmail(learnerEmail, mail.subject, mail.html);
-      notify(
-        "payment",
-        gateway === "Bank Transfer" ? "Enrolment received" : "Payment successful",
-        `${selectedCourse.title} — ${formatMoney(paidAmount)}`,
-        learnerEmail
-      );
-
-      // 3. Refresh lists
-      await loadDatabase();
-    } catch (err) {
-      console.error(err);
-      throw err;
+    // Enrolment + transaction are created SERVER-SIDE by the enroll Edge
+    // Function only after the payment is verified against the gateway. If it
+    // fails, throw so the checkout modal surfaces the reason.
+    const res = await dbEnroll(selectedCourse.id, gateway, reference);
+    if (!res.ok) {
+      throw new Error(res.reason || "We couldn't verify your payment, so you haven't been enrolled.");
     }
+    void dbLogEvent("checkout_complete", selectedCourse.id, learnerEmail);
+
+    const paidAmount = res.transaction?.amount ?? amount ?? selectedCourse.price;
+    const receipt = res.transaction?.receiptNumber || reference || "";
+
+    // Confirmation email (authenticated; no-op if email isn't configured).
+    // The in-app notification is created server-side by the enroll function.
+    const mail = paymentConfirmationEmail(
+      learnerName,
+      selectedCourse.title,
+      formatMoney(paidAmount),
+      receipt,
+      gateway === "Bank Transfer"
+    );
+    void dbSendEmail(learnerEmail, mail.subject, mail.html);
+
+    // Refresh lists
+    await loadDatabase();
   };
 
   // Handle LMS progress completion and check for certificate awards
@@ -429,27 +404,18 @@ export default function App() {
       // 1. Update progress on Supabase
       await dbUpdateEnrollmentProgress(enrollment.id, completedLessons, progress);
 
-      // 2. Check if finished (100% progress) and doesn't already have certificate
+      // 2. Check if finished (100%) and doesn't already have a certificate.
+      // Issuance is done SERVER-SIDE (issue-certificate Edge Function), which
+      // re-checks completion — learners can't self-insert certificates.
       const alreadyHasCert = certificates.some((c) => c.courseId === course.id);
       if (progress === 100 && !alreadyHasCert) {
-        const certId = "LANI-CERT-" + Math.floor(1000 + Math.random() * 9000);
-        const learnerEmail = profile?.email || user?.email || "learner@lani.academy";
-        const learnerName = profile?.full_name || "Learner";
-        const cert: Certificate = {
-          id: certId,
-          courseId: course.id,
-          courseTitle: course.title,
-          learnerEmail,
-          learnerName,
-          issueDate: new Date().toISOString().split("T")[0],
-          status: "Issued",
-        };
-        await dbSaveCertificate(cert);
-
-        // Notify the learner their certificate is ready (no-op if email unconfigured)
-        const mail = certificateReadyEmail(learnerName, course.title, certId);
-        void dbSendEmail(learnerEmail, mail.subject, mail.html);
-        notify("certificate", "Certificate issued", `Your certificate for ${course.title} is ready.`, learnerEmail);
+        const res = await dbIssueCertificate(course.id);
+        if (res.ok && res.certificate && !res.alreadyIssued) {
+          // Certificate-ready email (authenticated; no-op if email unconfigured).
+          // The in-app notification is created server-side by the function.
+          const mail = certificateReadyEmail(res.certificate.learnerName, course.title, res.certificate.id);
+          void dbSendEmail(res.certificate.learnerEmail, mail.subject, mail.html);
+        }
       }
 
       // 3. Refresh lists
@@ -970,6 +936,7 @@ export default function App() {
           selectedCourse ? (
             <CourseDetail
               course={selectedCourse}
+              initialTab={courseDetailTab}
               reviews={reviews.filter((r) => r.courseId === selectedCourse.id)}
               currentUserEmail={profile?.email || user?.email || ""}
               canReview={enrollments.some((e) => e.courseId === selectedCourse.id && e.learnerEmail === (profile?.email || user?.email))}

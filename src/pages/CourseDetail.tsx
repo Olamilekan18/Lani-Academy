@@ -16,18 +16,24 @@ import type { Course, CourseReview } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 
+type CourseDetailTab = "overview" | "curriculum" | "objectives" | "audience" | "reviews";
+
 interface CourseDetailProps {
   course: Course;
   reviews?: CourseReview[];
   currentUserEmail?: string;
   canReview?: boolean;
+  initialTab?: string;
   onSaveReview?: (review: Partial<CourseReview>) => Promise<void> | void;
   onEnrol: () => void;
   onBack: () => void;
 }
 
-export default function CourseDetail({ course, reviews = [], currentUserEmail = "", canReview = false, onSaveReview, onEnrol, onBack }: CourseDetailProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "curriculum" | "objectives" | "audience" | "reviews">("overview");
+export default function CourseDetail({ course, reviews = [], currentUserEmail = "", canReview = false, initialTab, onSaveReview, onEnrol, onBack }: CourseDetailProps) {
+  const validTabs: CourseDetailTab[] = ["overview", "curriculum", "objectives", "audience", "reviews"];
+  const [activeTab, setActiveTab] = useState<CourseDetailTab>(
+    (validTabs as string[]).includes(initialTab || "") ? (initialTab as CourseDetailTab) : "overview"
+  );
   const [expandedModule, setExpandedModule] = useState<number | null>(0);
   const [facProfile, setFacProfile] = useState<any>(null);
 

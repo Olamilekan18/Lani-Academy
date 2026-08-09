@@ -30,7 +30,7 @@ interface Props {
   surveyResponses: SurveyResponse[];
   wishlist: string[];
   onToggleWishlist: (courseId: string) => void;
-  onOpenCourse: (course: Course) => void;
+  onOpenCourse: (course: Course, tab?: string) => void;
   discussions: DiscussionPost[];
   onPostDiscussion: (post: DiscussionPost) => Promise<void> | void;
   onDeleteDiscussion: (id: string) => Promise<void> | void;
@@ -392,9 +392,14 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
                 <div className="flex justify-between text-xs font-semibold text-slate-500"><span>Progress</span><span>{en.progress}%</span></div>
                 <div className="progress-bar"><span style={{width:`${en.progress}%`}}/></div>
               </div>
-              <button onClick={() => onOpenPlayer(c, en)} className="btn-primary min-h-10 px-5 text-xs self-start md:self-auto gap-2">
-                <PlayCircle size={15}/>{en.progress === 100 ? "Review" : "Resume Learning"}
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2 self-start md:self-auto">
+                <button onClick={() => onOpenPlayer(c, en)} className="btn-primary min-h-10 px-5 text-xs gap-2">
+                  <PlayCircle size={15}/>{en.progress === 100 ? "Revisit" : "Resume Learning"}
+                </button>
+                <button onClick={() => onOpenCourse(c, "reviews")} className="btn-secondary min-h-10 px-4 text-xs gap-2" title="Rate & review this course">
+                  <Star size={14}/>Rate course
+                </button>
+              </div>
             </div>
           )) : (
             <div className="py-20 text-center border border-slate-200 rounded-2xl bg-slate-50/50">

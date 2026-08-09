@@ -17,8 +17,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { dbSaveLead, dbSendEmail } from "../lib/db";
-import { corporateLeadAckEmail } from "../lib/emailTemplates";
+import { dbSaveLead, dbSendTemplateEmail } from "../lib/db";
 import type { DeliveryMode } from "../lib/types";
 
 interface CorporateProps {
@@ -89,8 +88,7 @@ export default function Corporate({ thematicAreas }: CorporateProps) {
     try {
       const ok = await dbSaveLead(leadData);
       if (ok) {
-        const ack = corporateLeadAckEmail(leadData.contactName, leadData.organisation);
-        void dbSendEmail(leadData.email, ack.subject, ack.html);
+        void dbSendTemplateEmail(leadData.email, "lead_ack", { name: leadData.contactName, organisation: leadData.organisation });
         setSubmitted(true);
         e.currentTarget.reset();
         setTorName("");

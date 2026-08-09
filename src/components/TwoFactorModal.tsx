@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ShieldCheck, Loader2, LogOut, RefreshCw } from "lucide-react";
-import { generateOtp, sendOtpEmail } from "../lib/twoFactor";
+import { requestOtp, verifyOtp } from "../lib/twoFactor";
 
 interface TwoFactorModalProps {
   email: string;
@@ -9,25 +9,22 @@ interface TwoFactorModalProps {
   onCancel: () => void; // e.g. sign out
 }
 
-const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const RESEND_COOLDOWN = 30; // seconds
 
 export default function TwoFactorModal({ email, name, onVerified, onCancel }: TwoFactorModalProps) {
-  const codeRef = useRef<string>("");
-  const expiryRef = useRef<number>(0);
   const [entry, setEntry] = useState("");
   const [sending, setSending] = useState(true);
   const [delivered, setDelivered] = useState<boolean | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState("");
   const [cooldown, setCooldown] = useState(0);
 
+  // Ask the server to generate + email a fresh code. The code is never sent
+  // to the browser — it's verified server-side.
   const issueCode = async () => {
     setSending(true);
     setError("");
-    const code = generateOtp();
-    codeRef.current = code;
-    expiryRef.current = Date.now() + CODE_TTL_MS;
-    const ok = await sendOtpEmail(email, name, code);
+    const ok = await requestOtp(email, name);
     setDelivered(ok);
     setSending(false);
     setCooldown(RESEND_COOLDOWN);
@@ -46,16 +43,16 @@ export default function TwoFactorModal({ email, name, onVerified, onCancel }: Tw
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const verify = (e: React.FormEvent) => {
+  const verify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (Date.now() > expiryRef.current) {
-      setError("That code has expired. Please request a new one.");
-      return;
-    }
-    if (entry.trim() === codeRef.current) {
+    setError("");
+    setVerifying(true);
+    const ok = await verifyOtp(email, entry.trim());
+    setVerifying(false);
+    if (ok) {
       onVerified();
     } else {
-      setError("Incorrect code. Please try again.");
+      setError("Incorrect or expired code. Please try again or resend.");
     }
   };
 
@@ -92,8 +89,8 @@ export default function TwoFactorModal({ email, name, onVerified, onCancel }: Tw
             autoFocus
           />
           {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
-          <button type="submit" disabled={entry.length !== 6} className="btn-primary w-full justify-center disabled:opacity-50">
-            Verify & continue
+          <button type="submit" disabled={entry.length !== 6 || verifying} className="btn-primary w-full justify-center disabled:opacity-50">
+            {verifying ? <><Loader2 size={14} className="animate-spin" /> Verifying…</> : "Verify & continue"}
           </button>
         </form>
 

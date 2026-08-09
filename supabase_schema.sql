@@ -27,13 +27,28 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Profiles Policies
+-- Helper: is the caller staff? SECURITY DEFINER avoids RLS recursion.
+CREATE OR REPLACE FUNCTION public.is_staff()
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role IN ('admin', 'super_admin', 'facilitator')
+  );
+$$;
+
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
-CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles
-    FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Profiles are viewable by owner, staff, or if facilitator" ON public.profiles;
+CREATE POLICY "Profiles are viewable by owner, staff, or if facilitator" ON public.profiles
+    FOR SELECT USING (
+        auth.uid() = id
+        OR role = 'facilitator'
+        OR public.is_staff()
+    );
 
 DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
 CREATE POLICY "Users can update their own profile" ON public.profiles
-    FOR UPDATE USING (auth.uid() = id);
+    FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
 
 -- 3. Create Courses Table
@@ -116,9 +131,9 @@ DROP POLICY IF EXISTS "Learners can view their own enrollments" ON public.enroll
 CREATE POLICY "Learners can view their own enrollments" ON public.enrollments
     FOR SELECT USING (auth.email() = learner_email);
 
+-- Learner self-insert removed (audit C2): enrolments are created server-side by
+-- the `enroll` Edge Function (service role) after payment verification.
 DROP POLICY IF EXISTS "Learners can insert their own enrollments" ON public.enrollments;
-CREATE POLICY "Learners can insert their own enrollments" ON public.enrollments
-    FOR INSERT WITH CHECK (auth.email() = learner_email OR auth.uid() IS NULL); -- Allow guest registration, will associate with email
 
 DROP POLICY IF EXISTS "Learners can update progress" ON public.enrollments;
 CREATE POLICY "Learners can update progress" ON public.enrollments
@@ -133,6 +148,18 @@ CREATE POLICY "Admins can view and edit all enrollments" ON public.enrollments
         EXISTS (
             SELECT 1 FROM public.profiles
             WHERE public.profiles.id = auth.uid() AND (public.profiles.role = 'admin' OR public.profiles.role = 'super_admin')
+        )
+    );
+
+-- Facilitators may view enrollments for the courses they are assigned to
+-- (powers Avg. Completion + Learner Progress on the Facilitator Dashboard).
+DROP POLICY IF EXISTS "Facilitators can view enrollments for assigned courses" ON public.enrollments;
+CREATE POLICY "Facilitators can view enrollments for assigned courses" ON public.enrollments
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.facilitator_assignments fa
+            WHERE fa.course_id = public.enrollments.course_id
+              AND fa.facilitator_email = auth.email()
         )
     );
 
@@ -157,9 +184,9 @@ DROP POLICY IF EXISTS "Learners can view their own transactions" ON public.trans
 CREATE POLICY "Learners can view their own transactions" ON public.transactions
     FOR SELECT USING (auth.email() = learner_email);
 
+-- Learner self-insert removed (audit C2): transactions are recorded server-side
+-- by the `enroll` Edge Function (service role) after payment verification.
 DROP POLICY IF EXISTS "Learners can record transactions" ON public.transactions;
-CREATE POLICY "Learners can record transactions" ON public.transactions
-    FOR INSERT WITH CHECK (auth.email() = learner_email OR auth.uid() IS NULL);
 
 DROP POLICY IF EXISTS "Admins can do everything on transactions" ON public.transactions;
 CREATE POLICY "Admins can do everything on transactions" ON public.transactions
@@ -303,7 +330,8 @@ CREATE POLICY "Admins can manage CMS assets" ON public.cms_assets
 
 -- 10. Automatically Create Profile on Signup Trigger
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
     INSERT INTO public.profiles (id, full_name, email, role)
     VALUES (
@@ -314,7 +342,7 @@ BEGIN
     );
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- Drop trigger if it exists
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
@@ -359,7 +387,7 @@ ALTER TABLE public.quiz_attempts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Learners can view their own attempts" ON public.quiz_attempts;
 CREATE POLICY "Learners can view their own attempts" ON public.quiz_attempts FOR SELECT USING (auth.email() = learner_email);
 DROP POLICY IF EXISTS "Learners can insert attempts" ON public.quiz_attempts;
-CREATE POLICY "Learners can insert attempts" ON public.quiz_attempts FOR INSERT WITH CHECK (auth.email() = learner_email OR auth.uid() IS NULL);
+CREATE POLICY "Learners can insert attempts" ON public.quiz_attempts FOR INSERT WITH CHECK (auth.email() = learner_email);
 DROP POLICY IF EXISTS "Admins and facilitators can view all attempts" ON public.quiz_attempts;
 CREATE POLICY "Admins and facilitators can view all attempts" ON public.quiz_attempts FOR SELECT USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin', 'facilitator'))
@@ -402,7 +430,7 @@ ALTER TABLE public.assignment_submissions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Learners can view their own submissions" ON public.assignment_submissions;
 CREATE POLICY "Learners can view their own submissions" ON public.assignment_submissions FOR SELECT USING (auth.email() = learner_email);
 DROP POLICY IF EXISTS "Learners can insert submissions" ON public.assignment_submissions;
-CREATE POLICY "Learners can insert submissions" ON public.assignment_submissions FOR INSERT WITH CHECK (auth.email() = learner_email OR auth.uid() IS NULL);
+CREATE POLICY "Learners can insert submissions" ON public.assignment_submissions FOR INSERT WITH CHECK (auth.email() = learner_email);
 DROP POLICY IF EXISTS "Admins and facilitators can update submissions" ON public.assignment_submissions;
 CREATE POLICY "Admins and facilitators can update submissions" ON public.assignment_submissions FOR UPDATE USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin', 'super_admin', 'facilitator'))
@@ -606,7 +634,7 @@ CREATE TABLE IF NOT EXISTS public.survey_responses (
 );
 ALTER TABLE public.survey_responses ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Learners submit survey responses" ON public.survey_responses;
-CREATE POLICY "Learners submit survey responses" ON public.survey_responses FOR INSERT WITH CHECK (auth.email() = learner_email OR auth.uid() IS NULL);
+CREATE POLICY "Learners submit survey responses" ON public.survey_responses FOR INSERT WITH CHECK (auth.email() = learner_email);
 DROP POLICY IF EXISTS "Learners view their responses" ON public.survey_responses;
 CREATE POLICY "Learners view their responses" ON public.survey_responses FOR SELECT USING (auth.email() = learner_email);
 DROP POLICY IF EXISTS "Admins and facilitators view responses" ON public.survey_responses;
@@ -762,21 +790,22 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_course ON public.analytics_event
 -- This enforces role-based security at the database layer, independent of the client.
 
 CREATE OR REPLACE FUNCTION public.prevent_role_escalation()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   caller_role TEXT;
 BEGIN
-  IF NEW.role IS DISTINCT FROM OLD.role
-     AND NEW.role IN ('admin', 'super_admin')
-     AND auth.uid() IS NOT NULL THEN
+  -- Block ANY self-service role change. Only admins/super_admins (or the
+  -- server via service role, where auth.uid() is null) may change a role.
+  IF NEW.role IS DISTINCT FROM OLD.role AND auth.uid() IS NOT NULL THEN
     SELECT role INTO caller_role FROM public.profiles WHERE id = auth.uid();
     IF caller_role IS DISTINCT FROM 'admin' AND caller_role IS DISTINCT FROM 'super_admin' THEN
-      RAISE EXCEPTION 'Not permitted to assign administrative roles.';
+      RAISE EXCEPTION 'Not permitted to change account role.';
     END IF;
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS enforce_role_escalation ON public.profiles;
 CREATE TRIGGER enforce_role_escalation
@@ -989,3 +1018,23 @@ CREATE POLICY "Admins can read activity" ON public.learner_activity
               AND (public.profiles.role = 'admin' OR public.profiles.role = 'super_admin')
         )
     );
+
+
+-- ============================================================
+-- 34. Server-side email OTP store (backs real 2FA) — 2026-08-09
+-- ============================================================
+-- Codes stored hashed. RLS enabled with NO policies = deny all clients;
+-- only the auth-otp Edge Function (service role) touches this table.
+CREATE TABLE IF NOT EXISTS public.email_otps (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    consumed BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_otps_lookup ON public.email_otps (email, expires_at);
+
+ALTER TABLE public.email_otps ENABLE ROW LEVEL SECURITY;
