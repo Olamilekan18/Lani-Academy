@@ -17,3 +17,6 @@ Seed your first admin once: UPDATE public.profiles SET role='super_admin' WHERE 
 Important behavior notes
 Until you set the gateway secret keys, payment verification can't run, so checkout falls through in demo/test mode (nothing is charged, but enrolment is still granted). It becomes strictly enforced the moment the secrets exist.
 One thing I did not fix (flagged in the report): certificate issuance on course completion is blocked by RLS (admins-only insert), so it fails silently today. It needs the same server-side treatment as enrolment. Want me to build a issue-certificate edge function next?
+
+
+Turn on Supabase leaked-password protection and a stronger minimum password length; add CAPTCHA / rate-limiting to the public intake forms (contact, corporate leads, scholarship applications) since those are open by design; and there's a dev-server-only

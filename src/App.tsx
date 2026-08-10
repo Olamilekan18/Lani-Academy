@@ -37,6 +37,9 @@ import {
   dbGetCourses,
   dbGetEnrollments,
   dbGetTransactions,
+  dbUpdateTransactionStatus,
+  dbUpdateEnrollmentPaymentStatus,
+  BankTransferMeta,
   dbGetCertificates,
   dbGetLeads,
   dbGetApplications,
@@ -212,10 +215,26 @@ export default function App() {
       setCourses(dbCourses);
 
       const dbEnrollments = await dbGetEnrollments();
-      setEnrollments(dbEnrollments);
-
       const dbTransactions = await dbGetTransactions();
       setTransactions(dbTransactions);
+
+      // Reconcile enrollments with confirmed transactions
+      const reconciledEnrollments = dbEnrollments.map(enr => {
+        if (enr.paymentStatus === "Pending") {
+          const matchedTxn = dbTransactions.find(t =>
+            t.courseId === enr.courseId &&
+            t.learnerEmail.toLowerCase() === enr.learnerEmail.toLowerCase() &&
+            (t.status === "Manually Confirmed" || t.status === "Successful")
+          );
+          if (matchedTxn) {
+            // Repair in background DB
+            void dbUpdateEnrollmentPaymentStatus(enr.courseId, enr.learnerEmail, "Successful");
+            return { ...enr, paymentStatus: "Successful" as const };
+          }
+        }
+        return enr;
+      });
+      setEnrollments(reconciledEnrollments);
 
       const dbCertificates = await dbGetCertificates();
       setCertificates(dbCertificates);
@@ -329,6 +348,7 @@ export default function App() {
     else if (view === "organization") navigate("/organization");
     else if (view === "admin") navigate("/admin");
     else if (view === "verify") navigate("/verify");
+    else if (view === "signup") navigate("/signup");
     else if (view === "about") navigate("/about");
     else if (view === "certification") navigate("/certification");
     else if (view === "resources") navigate("/resources");
@@ -349,6 +369,21 @@ export default function App() {
     }
   };
 
+  // Resume a pending course purchase after a guest signs up: once the learner
+  // is authenticated, reopen the intended course and jump straight to checkout.
+  useEffect(() => {
+    if (!user || profile?.role !== "learner") return;
+    let pending: string | null = null;
+    try { pending = sessionStorage.getItem("lani-pending-course"); } catch { /* ignore */ }
+    if (!pending) return;
+    const course = courses.find((c) => c.id === pending);
+    if (!course) return; // courses may still be loading — retry when they arrive
+    try { sessionStorage.removeItem("lani-pending-course"); } catch { /* ignore */ }
+    setSelectedCourse(course);
+    setShowCheckout(true);
+    navigate("/courses");
+  }, [user, profile, courses]);
+
   // Open course page
   const handleOpenCourse = (course: Course, tab?: string) => {
     setSelectedCourse(course);
@@ -361,7 +396,8 @@ export default function App() {
   const handlePaymentComplete = async (
     gateway: "Paystack" | "Flutterwave" | "Bank Transfer",
     reference?: string,
-    amount?: number
+    amount?: number,
+    bankMeta?: BankTransferMeta
   ) => {
     if (!selectedCourse) return;
 
@@ -371,7 +407,7 @@ export default function App() {
     // Enrolment + transaction are created SERVER-SIDE by the enroll Edge
     // Function only after the payment is verified against the gateway. If it
     // fails, throw so the checkout modal surfaces the reason.
-    const res = await dbEnroll(selectedCourse.id, gateway, reference);
+    const res = await dbEnroll(selectedCourse.id, gateway, reference, bankMeta);
     if (!res.ok) {
       throw new Error(res.reason || "We couldn't verify your payment, so you haven't been enrolled.");
     }
@@ -801,8 +837,31 @@ export default function App() {
   };
 
   const handleUpdatePaymentStatus = async (id: string, status: Transaction["status"]) => {
-    // In a real implementation this would update Supabase. For demo, we update state locally if it's not implemented in db.ts
+    // Optimistic update for transactions
     setTransactions(txns => txns.map(t => t.id === id ? { ...t, status } : t));
+    const targetTxn = transactions.find(t => t.id === id);
+
+    if (targetTxn) {
+      const newEnrollmentStatus = (status === "Manually Confirmed" || status === "Successful") ? "Successful" : "Manual Review";
+      setEnrollments(enrs => enrs.map(e =>
+        (e.courseId === targetTxn.courseId && e.learnerEmail.toLowerCase() === targetTxn.learnerEmail.toLowerCase())
+          ? { ...e, paymentStatus: newEnrollmentStatus }
+          : e
+      ));
+    }
+
+    const ok = await dbUpdateTransactionStatus(id, status);
+    if (ok) {
+      if (targetTxn) {
+        const newEnrollmentStatus = (status === "Manually Confirmed" || status === "Successful") ? "Successful" : "Manual Review";
+        await dbUpdateEnrollmentPaymentStatus(targetTxn.courseId, targetTxn.learnerEmail, newEnrollmentStatus);
+      }
+      toast.success(`Payment status updated to ${status}`);
+      await loadDatabase();
+    } else {
+      toast.error("Could not update payment status.");
+      await loadDatabase(); // revert optimistic change from source of truth
+    }
   };
 
   // Verification redirects
@@ -944,8 +1003,9 @@ export default function App() {
               onBack={() => { setSelectedCourse(null); navigate("/courses"); }}
               onEnrol={() => {
                 if (!user) {
-                  toast.error("Please sign in as a learner to enrol.");
-                  navigate("/learn");
+                  try { if (selectedCourse) sessionStorage.setItem("lani-pending-course", selectedCourse.id); } catch { /* ignore */ }
+                  toast("Create your learner account to complete enrolment — we'll take you straight to payment.");
+                  navigate("/learn?mode=signup");
                   return;
                 }
                 if (profile?.role !== "learner") {

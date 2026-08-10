@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { BookOpen, Award, CreditCard, PlayCircle, ShieldCheck, Calendar, ClipboardCheck, User, Bell, ChevronRight, CheckCircle, Clock, FileText, ExternalLink, TrendingUp, AlertCircle, Upload, Send, Loader2, Star, MessageSquare } from "lucide-react";
 import type { Course, Enrollment, Certificate, Transaction, Quiz, QuizAttempt, Assignment, AssignmentSubmission, Announcement, CalendarEvent, Notification, Survey, SurveyResponse, DiscussionPost } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
@@ -81,6 +81,20 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   }, [myEmail]);
 
   const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!notifOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setNotifOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [notifOpen]);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [submitFor, setSubmitFor] = useState<string | null>(null);
   const [subContent, setSubContent] = useState("");
@@ -113,6 +127,11 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   const [pOrg, setPOrg] = useState(profile?.organisation || "");
   const [pJob, setPJob] = useState(profile?.job_title || "");
   const [pBio, setPBio] = useState(profile?.bio || "");
+  const [pCountry, setPCountry] = useState(profile?.country || "");
+  const [pState, setPState] = useState(profile?.state_region || "");
+  const [pCity, setPCity] = useState(profile?.city || "");
+  const [pGender, setPGender] = useState(profile?.gender || "");
+  const [pDob, setPDob] = useState(profile?.date_of_birth || "");
   const [savingProfile, setSavingProfile] = useState(false);
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
@@ -121,7 +140,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingProfile(true);
-    const { error } = await updateProfile({ full_name: pName, phone: pPhone, organisation: pOrg, job_title: pJob, bio: pBio });
+    const { error } = await updateProfile({ full_name: pName, phone: pPhone, organisation: pOrg, job_title: pJob, bio: pBio, country: pCountry, state_region: pState, city: pCity, gender: pGender, date_of_birth: pDob || undefined });
     setSavingProfile(false);
     if (error) toast.error(error); else toast.success("Profile updated");
   };
@@ -167,9 +186,9 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   const myAssignments = assignments.filter(a => enrollments.some(e => e.courseId === a.courseId));
   const mySurveys = surveys.filter(s => enrollments.some(e => e.courseId === s.courseId));
 
-  // Continue learning: furthest-along course that isn't finished yet
+  // Continue learning: furthest-along course that isn't finished yet and is paid
   const continueProgram = programs
-    .filter(p => p.enrollment.progress < 100)
+    .filter(p => p.enrollment.progress < 100 && p.enrollment.paymentStatus !== "Pending" && p.enrollment.paymentStatus !== "Manual Review")
     .sort((a, b) => b.enrollment.progress - a.enrollment.progress)[0];
 
   // Upcoming deadlines: assignment/quiz due dates + assessment-deadline events, future only
@@ -215,10 +234,10 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-2">
             <span className="eyebrow border-white/20 bg-white/5 text-white/90">LMS Workspace</span>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">Welcome back, Adewale!</h1>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">Welcome back, {profile?.full_name || "Learner"}!</h1>
             <p className="text-xs text-slate-300 max-w-md">Track your learning progress, take assessments, and download your credentials.</p>
           </div>
-          <div className="relative">
+          <div className="relative" ref={notifRef}>
             <button onClick={() => setNotifOpen(!notifOpen)} className="relative rounded-lg bg-white/10 border border-white/20 p-2.5 hover:bg-white/20 transition-all">
               <Bell size={20} />
               {unreadNotifs > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-[10px] font-bold flex items-center justify-center">{unreadNotifs}</span>}
@@ -294,7 +313,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
               <div className="min-w-0">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-lani-green">Continue learning</span>
                 <h3 className="text-sm font-bold text-lani-navy truncate">{continueProgram.course.title}</h3>
-                <div className="mt-1.5 flex items-center gap-2"><div className="progress-bar !h-2 w-32"><span style={{width:`${continueProgram.enrollment.progress}%`}}/></div><span className="text-[10px] font-bold text-slate-500">{continueProgram.enrollment.progress}%</span></div>
+                <div className="mt-1.5 flex items-center gap-2"><div className="progress-bar !h-2 w-32"><div className="h-full rounded-full bg-gradient-to-r from-lani-green to-lani-emerald transition-all duration-500" style={{width:`${continueProgram.enrollment.progress}%`}}/></div><span className="text-[10px] font-bold text-slate-500">{continueProgram.enrollment.progress}%</span></div>
               </div>
             </div>
             <button onClick={() => continueProgram.course && onOpenPlayer(continueProgram.course, continueProgram.enrollment)} className="btn-primary min-h-10 px-5 text-xs gap-2 shrink-0"><PlayCircle size={15}/>Resume</button>
@@ -338,7 +357,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
                   <img src={c.image} alt="" className="h-10 w-10 rounded-lg object-cover bg-slate-100 shrink-0"/>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-lani-navy truncate">{c.title}</p>
-                    <div className="progress-bar mt-1.5 !h-2"><span style={{width:`${en.progress}%`}}/></div>
+                    <div className="progress-bar mt-1.5 !h-2"><div className="h-full rounded-full bg-gradient-to-r from-lani-green to-lani-emerald transition-all duration-500" style={{width:`${en.progress}%`}}/></div>
                   </div>
                   <span className="text-xs font-bold text-lani-green shrink-0">{en.progress}%</span>
                 </div>
@@ -390,15 +409,27 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
               </div>
               <div className="flex-1 max-w-xs space-y-1.5">
                 <div className="flex justify-between text-xs font-semibold text-slate-500"><span>Progress</span><span>{en.progress}%</span></div>
-                <div className="progress-bar"><span style={{width:`${en.progress}%`}}/></div>
+                <div className="progress-bar"><div className="h-full rounded-full bg-gradient-to-r from-lani-green to-lani-emerald transition-all duration-500" style={{width:`${en.progress}%`}}/></div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2 self-start md:self-auto">
-                <button onClick={() => onOpenPlayer(c, en)} className="btn-primary min-h-10 px-5 text-xs gap-2">
-                  <PlayCircle size={15}/>{en.progress === 100 ? "Revisit" : "Resume Learning"}
-                </button>
-                <button onClick={() => onOpenCourse(c, "reviews")} className="btn-secondary min-h-10 px-4 text-xs gap-2" title="Rate & review this course">
-                  <Star size={14}/>Rate course
-                </button>
+                {en.paymentStatus === "Pending" ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+                    <Clock size={14} /> Pending Confirmation
+                  </span>
+                ) : en.paymentStatus === "Manual Review" ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">
+                    <AlertCircle size={14} /> Payment Denied
+                  </span>
+                ) : (
+                  <>
+                    <button onClick={() => onOpenPlayer(c, en)} className="btn-primary min-h-10 px-5 text-xs gap-2">
+                      <PlayCircle size={15}/>{en.progress === 100 ? "Revisit" : "Resume Learning"}
+                    </button>
+                    <button onClick={() => onOpenCourse(c, "reviews")} className="btn-secondary min-h-10 px-4 text-xs gap-2" title="Rate & review this course">
+                      <Star size={14}/>Rate course
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )) : (
@@ -695,7 +726,19 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
                 <label className="form-field">Phone<input value={pPhone} onChange={e => setPPhone(e.target.value)} placeholder="+234..."/></label>
                 <label className="form-field">Organisation<input value={pOrg} onChange={e => setPOrg(e.target.value)} placeholder="Company / institution"/></label>
                 <label className="form-field">Job Title<input value={pJob} onChange={e => setPJob(e.target.value)} placeholder="Your role"/></label>
-                <label className="form-field">Location<input placeholder="City, Country"/></label>
+                <label className="form-field">Country<input value={pCountry} onChange={e => setPCountry(e.target.value)} placeholder="e.g. Nigeria"/></label>
+                <label className="form-field">State / Region<input value={pState} onChange={e => setPState(e.target.value)} placeholder="e.g. Lagos"/></label>
+                <label className="form-field">City<input value={pCity} onChange={e => setPCity(e.target.value)} placeholder="e.g. Ikeja"/></label>
+                <label className="form-field">Gender
+                  <select value={pGender} onChange={e => setPGender(e.target.value)}>
+                    <option value="">Select…</option>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Non-binary">Non-binary</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                </label>
+                <label className="form-field">Date of Birth<input type="date" value={pDob} onChange={e => setPDob(e.target.value)} max={new Date().toISOString().split("T")[0]}/></label>
                 <label className="form-field sm:col-span-2">Short bio<textarea value={pBio} onChange={e => setPBio(e.target.value)} rows={3} placeholder="Tell us a little about yourself"/></label>
                 <div className="sm:col-span-2"><button type="submit" disabled={savingProfile} className="btn-primary text-xs px-6">{savingProfile ? "Saving..." : "Save changes"}</button></div>
               </form>

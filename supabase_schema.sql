@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     avatar_url TEXT,
     bio TEXT,
     qualifications TEXT,
+    country TEXT,
+    state_region TEXT,
+    city TEXT,
+    gender TEXT,
+    date_of_birth DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
@@ -175,6 +180,12 @@ CREATE TABLE IF NOT EXISTS public.transactions (
     receipt_number TEXT UNIQUE NOT NULL,
     created_at DATE DEFAULT CURRENT_DATE
 );
+
+-- Bank transfer metadata (learner-submitted proof of payment)
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS depositor_name TEXT;
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS source_bank TEXT;
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS transfer_reference TEXT;
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS receipt_url TEXT;
 
 -- Enable RLS for Transactions
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;

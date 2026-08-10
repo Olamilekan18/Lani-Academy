@@ -29,6 +29,12 @@ export default function Login({ portalRole, onSuccess, onNavigate }: LoginProps)
   const [qualifications, setQualifications] = useState("");
   const [orgName, setOrgName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
+  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState("");
+  const [stateRegion, setStateRegion] = useState("");
+  const [city, setCity] = useState("");
+  const [gender, setGender] = useState("");
+  const [dob, setDob] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -70,6 +76,13 @@ export default function Login({ portalRole, onSuccess, onNavigate }: LoginProps)
           } else if (portalRole === "organization") {
             updatePayload.organisation = orgName;
             updatePayload.job_title = jobTitle;
+          } else if (portalRole === "learner") {
+            updatePayload.phone = phone;
+            updatePayload.country = country;
+            updatePayload.state_region = stateRegion;
+            updatePayload.city = city;
+            updatePayload.gender = gender;
+            updatePayload.date_of_birth = dob || null;
           }
           await updateProfile(updatePayload);
 
@@ -192,6 +205,75 @@ export default function Login({ portalRole, onSuccess, onNavigate }: LoginProps)
                       placeholder="e.g. HR Manager / L&D Director"
                     />
                   </label>
+                </>
+              )}
+              {portalRole === "learner" && (
+                <>
+                  <label className="form-field">
+                    Phone Number
+                    <input
+                      type="tel"
+                      required
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+234 800 000 0000"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="form-field">
+                      Country
+                      <input
+                        type="text"
+                        required
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        placeholder="e.g. Nigeria"
+                      />
+                    </label>
+                    <label className="form-field">
+                      State / Region
+                      <input
+                        type="text"
+                        required
+                        value={stateRegion}
+                        onChange={(e) => setStateRegion(e.target.value)}
+                        placeholder="e.g. Lagos"
+                      />
+                    </label>
+                  </div>
+                  <label className="form-field">
+                    City
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="e.g. Ikeja"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="form-field">
+                      Gender
+                      <select
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                      >
+                        <option value="">Select…</option>
+                        <option value="Female">Female</option>
+                        <option value="Male">Male</option>
+                        <option value="Non-binary">Non-binary</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                      </select>
+                    </label>
+                    <label className="form-field">
+                      Date of Birth
+                      <input
+                        type="date"
+                        value={dob}
+                        onChange={(e) => setDob(e.target.value)}
+                        max={new Date().toISOString().split("T")[0]}
+                      />
+                    </label>
+                  </div>
                 </>
               )}
             </>

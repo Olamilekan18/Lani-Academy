@@ -2,8 +2,16 @@
 -- Apply in Supabase → SQL Editor to fix:
 --   1. Facilitator "Avg. Completion" + "Learner Progress" (empty/0%)
 --   2. Learner "Day Streak" stuck at 0
+--   3. Extended learner profile fields (country/state/city/gender/DOB)
 -- Idempotent and safe to re-run.
 -- ============================================================
+
+-- 0) Extended learner profile columns.
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS state_region TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS gender TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS date_of_birth DATE;
 
 -- 1) Let facilitators read enrollments for their assigned courses.
 DROP POLICY IF EXISTS "Facilitators can view enrollments for assigned courses" ON public.enrollments;

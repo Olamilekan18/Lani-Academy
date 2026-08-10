@@ -109,6 +109,10 @@ export type Transaction = {
   status: "Pending" | "Successful" | "Failed" | "Refunded" | "Manually Confirmed";
   receiptNumber: string;
   createdAt: string;
+  depositorName?: string;
+  sourceBank?: string;
+  transferReference?: string;
+  receiptUrl?: string;
 };
 
 export type CertificateType =

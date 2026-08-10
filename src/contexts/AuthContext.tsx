@@ -15,6 +15,11 @@ interface Profile {
   avatar_url: string | null;
   bio?: string;
   qualifications?: string;
+  country?: string;
+  state_region?: string;
+  city?: string;
+  gender?: string;
+  date_of_birth?: string;
 }
 
 interface AuthContextType {

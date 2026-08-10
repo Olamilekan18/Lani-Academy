@@ -8,10 +8,12 @@ import {
   CheckCircle2,
   Building2,
   Lock,
+  Upload,
 } from "lucide-react";
 import type { Course } from "../lib/types";
+import type { BankTransferMeta } from "../lib/db";
 import { formatMoney } from "../lib/utils";
-import { dbValidatePromo } from "../lib/db";
+import { dbValidatePromo, dbUploadFile } from "../lib/db";
 
 type Gateway = "Paystack" | "Flutterwave" | "Bank Transfer";
 
@@ -20,7 +22,12 @@ interface CheckoutModalProps {
   learnerName: string;
   learnerEmail: string;
   onClose: () => void;
-  onPaymentComplete: (gateway: Gateway, reference?: string, amount?: number) => Promise<void>;
+  onPaymentComplete: (
+    gateway: Gateway,
+    reference?: string,
+    amount?: number,
+    bankMeta?: BankTransferMeta
+  ) => Promise<void>;
 }
 
 // Public keys are safe to expose on the client for both gateways.
@@ -66,6 +73,14 @@ export default function CheckoutModal({
   const [promoMsg, setPromoMsg] = useState("");
   const [checkingPromo, setCheckingPromo] = useState(false);
 
+  // Bank transfer form fields
+  const [btDepositor, setBtDepositor] = useState("");
+  const [btBank, setBtBank] = useState("");
+  const [btRef, setBtRef] = useState("");
+  const [btReceiptFile, setBtReceiptFile] = useState<File | null>(null);
+  const [btReceiptPreview, setBtReceiptPreview] = useState("");
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+
   const finalAmount = Math.max(0, Math.round(course.price * (1 - discount / 100)));
 
   const applyPromo = async () => {
@@ -103,13 +118,13 @@ export default function CheckoutModal({
     setStep("pay");
   };
 
-  const finalise = async (gw: Gateway, ref: string) => {
+  const finalise = async (gw: Gateway, ref: string, bankMeta?: BankTransferMeta) => {
     setLoading(true);
     try {
       // The enrolment is granted server-side only after the gateway confirms
       // the charge (audit remediation C2). onPaymentComplete throws with a
       // reason if verification/enrolment fails.
-      await onPaymentComplete(gw, ref, finalAmount);
+      await onPaymentComplete(gw, ref, finalAmount, bankMeta);
       setReference(ref);
       setStep("success");
     } catch (e) {
@@ -183,10 +198,39 @@ export default function CheckoutModal({
     }, 1400);
   };
 
+  // ── Bank transfer submit handler ─────────────────────────────
+  const handleBankTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!btDepositor.trim()) { setError("Please enter the depositor's name."); return; }
+    if (!btBank.trim()) { setError("Please enter the bank name."); return; }
+    setError("");
+
+    let receiptUrl: string | undefined;
+    if (btReceiptFile) {
+      setUploadingReceipt(true);
+      const uploaded = await dbUploadFile(btReceiptFile, "receipts", ["image/*", "application/pdf"]);
+      setUploadingReceipt(false);
+      if (uploaded) {
+        receiptUrl = uploaded;
+      } else {
+        setError("Invalid file type or dangerous file extension detected.");
+        return;
+      }
+    }
+
+    const bankMeta: BankTransferMeta = {
+      depositorName: btDepositor.trim(),
+      sourceBank: btBank.trim(),
+      transferReference: btRef.trim() || undefined,
+      receiptUrl,
+    };
+
+    void finalise("Bank Transfer", "BT-" + Math.floor(100000 + Math.random() * 900000), bankMeta);
+  };
+
   const handlePay = () => {
     if (gateway === "Bank Transfer") {
-      // Register as pending; admin confirms offline payment.
-      void finalise("Bank Transfer", "BT-" + Math.floor(100000 + Math.random() * 900000));
+      // Handled by the form submit
       return;
     }
     if (demoMode) return payDemo();
@@ -194,9 +238,15 @@ export default function CheckoutModal({
     if (gateway === "Flutterwave") return void payWithFlutterwave();
   };
 
+  const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setBtReceiptFile(file);
+    setBtReceiptPreview(file ? URL.createObjectURL(file) : "");
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-lani-navy/70 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
@@ -286,17 +336,17 @@ export default function CheckoutModal({
           )}
 
           {step === "pay" && (
-            <div className="grid gap-6 text-center py-4">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-lani-green/10 text-lani-green">
+            <div className="grid gap-6 py-4">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-lani-green/10 text-lani-green text-center">
                 <ShieldCheck size={28} />
               </div>
-              <div>
+              <div className="text-center">
                 <h4 className="text-lg font-bold text-lani-navy">
                   {gateway === "Bank Transfer" ? "Bank Transfer Instructions" : `Pay with ${gateway}`}
                 </h4>
                 <p className="mt-1 text-sm text-slate-500">
                   {gateway === "Bank Transfer"
-                    ? "Transfer the exact amount, then submit for manual confirmation."
+                    ? "Transfer the exact amount to the account below, then fill in your transfer details."
                     : demoMode
                     ? "Demo mode — no live key configured. A simulated payment will be recorded."
                     : `You'll complete payment securely in the ${gateway} window.`}
@@ -304,12 +354,101 @@ export default function CheckoutModal({
               </div>
 
               {gateway === "Bank Transfer" && (
-                <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left text-sm leading-6 text-slate-600">
-                  <p><strong>Bank:</strong> LANI Group Academy — Access Bank Plc</p>
-                  <p><strong>Account:</strong> 101-202-3034</p>
-                  <p><strong>Reference:</strong> LANI-{course.code.substring(0, 4)}-{learnerName.replace(/\s+/g, "").substring(0, 4).toUpperCase()}</p>
-                  <p className="mt-1 text-xs text-slate-400">Your enrolment is granted once finance confirms the transfer.</p>
-                </div>
+                <>
+                  {/* Transfer target details */}
+                  <div className="rounded-xl border border-lani-green/20 bg-lani-mist p-5 space-y-2">
+                    <h5 className="text-xs font-bold uppercase tracking-wider text-lani-green">Transfer To</h5>
+                    <div className="grid gap-1.5 text-sm leading-6 text-slate-700">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-medium">Bank:</span>
+                        <span className="font-bold text-lani-navy">Access Bank Plc</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-medium">Account Name:</span>
+                        <span className="font-bold text-lani-navy">LANI Group Academy</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-medium">Account Number:</span>
+                        <span className="font-bold text-lani-navy font-mono tracking-wider">101-202-3034</span>
+                      </div>
+                      <div className="flex justify-between border-t border-lani-green/10 pt-2 mt-1">
+                        <span className="text-slate-500 font-medium">Amount to Transfer:</span>
+                        <span className="font-extrabold text-lani-green text-base">{formatMoney(finalAmount)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bank transfer proof form */}
+                  <form onSubmit={handleBankTransferSubmit} className="grid gap-3">
+                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-500">Your Transfer Details</h5>
+
+                    <label className="form-field">
+                      Depositor Name <span className="text-red-400">*</span>
+                      <input
+                        type="text"
+                        required
+                        value={btDepositor}
+                        onChange={(e) => setBtDepositor(e.target.value)}
+                        placeholder="Name on the sending account"
+                      />
+                    </label>
+
+                    <label className="form-field">
+                      Bank Name <span className="text-red-400">*</span>
+                      <input
+                        type="text"
+                        required
+                        value={btBank}
+                        onChange={(e) => setBtBank(e.target.value)}
+                        placeholder="e.g. GTBank, First Bank"
+                      />
+                    </label>
+
+                    <label className="form-field">
+                      Transfer Reference / Session ID <span className="text-slate-400 font-normal">(optional)</span>
+                      <input
+                        type="text"
+                        value={btRef}
+                        onChange={(e) => setBtRef(e.target.value)}
+                        placeholder="e.g. 1234567890"
+                      />
+                    </label>
+
+                    <label className="form-field">
+                      Upload Receipt <span className="text-slate-400 font-normal">(optional)</span>
+                      <div className="relative mt-1">
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          onChange={handleReceiptChange}
+                          className="block w-full text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-lani-green/10 file:px-3 file:py-2 file:text-xs file:font-bold file:text-lani-green hover:file:bg-lani-green/20 cursor-pointer"
+                        />
+                      </div>
+                    </label>
+
+                    {btReceiptPreview && btReceiptFile?.type.startsWith("image/") && (
+                      <img src={btReceiptPreview} alt="Receipt preview" className="h-28 w-auto rounded-lg border border-slate-200 object-contain" />
+                    )}
+
+                    <p className="text-[11px] text-slate-400 leading-4">
+                      Your enrolment will be activated once our admin team confirms the transfer. This usually takes 1–2 business hours.
+                    </p>
+
+                    <button type="submit" disabled={loading || uploadingReceipt} className="btn-primary w-full justify-center">
+                      {loading || uploadingReceipt ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          {uploadingReceipt ? "Uploading receipt..." : "Processing..."}
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={16} />
+                          Submit Transfer for Confirmation
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </>
               )}
 
               {demoMode && (
@@ -318,19 +457,20 @@ export default function CheckoutModal({
                 </div>
               )}
 
-              <button type="button" onClick={handlePay} disabled={loading} className="btn-primary w-full justify-center">
-                {loading ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Processing...
-                  </>
-                ) : gateway === "Bank Transfer" ? (
-                  "Submit for Confirmation"
-                ) : (
-                  `Pay ${formatMoney(finalAmount)}`
-                )}
-              </button>
-              <button type="button" onClick={() => setStep("info")} className="text-xs font-semibold text-slate-400 hover:text-lani-navy">
+              {gateway !== "Bank Transfer" && (
+                <button type="button" onClick={handlePay} disabled={loading} className="btn-primary w-full justify-center">
+                  {loading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    `Pay ${formatMoney(finalAmount)}`
+                  )}
+                </button>
+              )}
+
+              <button type="button" onClick={() => setStep("info")} className="text-xs font-semibold text-slate-400 hover:text-lani-navy text-center">
                 ← Back
               </button>
             </div>
@@ -347,7 +487,7 @@ export default function CheckoutModal({
                 </h4>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
                   {gateway === "Bank Transfer"
-                    ? <>Your enrolment in <strong>{course.title}</strong> is pending finance confirmation of your transfer.</>
+                    ? <>Your enrolment in <strong>{course.title}</strong> is pending admin confirmation of your transfer. You'll be notified once it's approved.</>
                     : <>You're enrolled in <strong>{course.title}</strong>. A receipt has been recorded to your account.</>}
                 </p>
                 {reference && (

@@ -69,6 +69,7 @@ serve(async (req) => {
   const courseId = String(payload?.courseId ?? "");
   const gateway = String(payload?.gateway ?? "");
   const reference = String(payload?.reference ?? "").trim();
+  const bankMeta = payload?.bankMeta || {};
   if (!courseId) return json({ ok: false, reason: "Missing courseId" }, 400, origin);
   if (!["Paystack", "Flutterwave", "Bank Transfer"].includes(gateway))
     return json({ ok: false, reason: "Unsupported gateway" }, 400, origin);
@@ -131,6 +132,10 @@ serve(async (req) => {
     gateway,
     status: txnStatus,
     receipt_number: receipt,
+    depositor_name: bankMeta.depositorName ? String(bankMeta.depositorName) : null,
+    source_bank: bankMeta.sourceBank ? String(bankMeta.sourceBank) : null,
+    transfer_reference: bankMeta.transferReference ? String(bankMeta.transferReference) : null,
+    receipt_url: bankMeta.receiptUrl ? String(bankMeta.receiptUrl) : null,
   }).select().maybeSingle();
   if (txnErr) return json({ ok: false, reason: `Could not record transaction: ${txnErr.message}` }, 500, origin);
 

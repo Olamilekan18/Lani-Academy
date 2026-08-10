@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star, Calendar, MessageSquare, Bell } from "lucide-react";
 import type { Course, CourseModule, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt, Survey, SurveyResponse, AttendanceRecord, DiscussionPost } from "../lib/types";
@@ -43,6 +43,20 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
   const { profile, user } = useAuth();
   const [editingCurriculum, setEditingCurriculum] = useState<Course | null>(null);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const alertsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!alertsOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (alertsRef.current && !alertsRef.current.contains(e.target as Node)) setAlertsOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setAlertsOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [alertsOpen]);
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-facilitator-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
@@ -250,7 +264,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
             <h1 className="text-3xl font-extrabold text-white tracking-tight">Welcome, {profile?.full_name || user?.email || "Facilitator"}</h1>
             <p className="text-xs text-white/70 max-w-md">Manage your assigned courses, track learner progress, grade submissions, and post announcements.</p>
           </div>
-          <div className="relative shrink-0">
+          <div className="relative shrink-0" ref={alertsRef}>
             <button onClick={() => setAlertsOpen(!alertsOpen)} className="relative rounded-lg bg-white/10 border border-white/20 p-2.5 hover:bg-white/20 transition-all">
               <Bell size={20} />
               {totalFacAlerts > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-[10px] font-bold flex items-center justify-center">{totalFacAlerts}</span>}
@@ -348,7 +362,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
                     <div className="text-right">
                       <div className="text-xs font-semibold text-slate-500">Avg. Completion</div>
                       <div className="text-xl font-extrabold text-lani-navy">{courseAvg}%</div>
-                      <div className="progress-bar mt-1 !h-2 w-32"><span style={{width:`${courseAvg}%`}}/></div>
+                      <div className="progress-bar mt-1 !h-2 w-32"><div className="h-full rounded-full bg-gradient-to-r from-lani-green to-lani-emerald transition-all duration-500" style={{width:`${courseAvg}%`}}/></div>
                     </div>
                     <button onClick={() => setEditingCurriculum(c)} className="btn-secondary min-h-9 px-3 text-xs gap-1.5"><ListChecks size={14}/>Manage curriculum</button>
                   </div>
@@ -379,7 +393,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
                       <td className="text-xs font-semibold">{c?.title || e.courseId}</td>
                       <td>
                         <div className="flex items-center gap-2">
-                          <div className="progress-bar !h-2 w-20"><span style={{width:`${e.progress}%`}}/></div>
+                          <div className="progress-bar !h-2 w-20"><div className="h-full rounded-full bg-gradient-to-r from-lani-green to-lani-emerald transition-all duration-500" style={{width:`${e.progress}%`}}/></div>
                           <span className="text-xs font-bold text-lani-navy">{e.progress}%</span>
                         </div>
                       </td>

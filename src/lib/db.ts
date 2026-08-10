@@ -217,6 +217,38 @@ export async function dbSaveTransaction(transaction: Transaction): Promise<boole
   return true;
 }
 
+// Admin-only: persist a payment/transaction status change (e.g. Manually
+// Confirmed, Refunded). Relies on the "Admins can do everything" RLS policy.
+export async function dbUpdateTransactionStatus(id: string, status: Transaction["status"]): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("transactions").update({ status }).eq("id", id);
+  if (error) {
+    console.error("Error updating transaction status:", error.message);
+    return false;
+  }
+  return true;
+}
+
+// Admin-only: update an enrollment's paymentStatus (e.g. when confirming or
+// denying a bank transfer). Relies on admin RLS policy.
+export async function dbUpdateEnrollmentPaymentStatus(
+  courseId: string,
+  learnerEmail: string,
+  paymentStatus: "Successful" | "Pending" | "Manual Review"
+): Promise<boolean> {
+  if (!supabase || !courseId || !learnerEmail) return false;
+  const { error } = await supabase
+    .from("enrollments")
+    .update({ payment_status: paymentStatus })
+    .eq("course_id", courseId)
+    .ilike("learner_email", learnerEmail.trim());
+  if (error) {
+    console.error("Error updating enrollment payment status:", error.message);
+    return false;
+  }
+  return true;
+}
+
 // Certificates Queries
 export async function dbGetCertificates(): Promise<Certificate[]> {
   if (!supabase) return [];
@@ -408,15 +440,23 @@ export interface EnrollResult {
   reason?: string;
 }
 
+export interface BankTransferMeta {
+  depositorName: string;
+  sourceBank: string;
+  transferReference?: string;
+  receiptUrl?: string;
+}
+
 export async function dbEnroll(
   courseId: string,
   gateway: "Paystack" | "Flutterwave" | "Bank Transfer",
-  reference?: string
+  reference?: string,
+  bankMeta?: BankTransferMeta
 ): Promise<EnrollResult> {
   if (!supabase) return { ok: false, reason: "Supabase not configured" };
   try {
     const { data, error } = await supabase.functions.invoke("enroll", {
-      body: { courseId, gateway, reference },
+      body: { courseId, gateway, reference, bankMeta },
     });
     if (error) {
       // Try to surface the function's JSON error message when present.
@@ -466,9 +506,28 @@ export async function dbSendTemplateEmail(
 }
 
 // Upload a file to the public "media" storage bucket and return its public URL.
-export async function dbUploadFile(file: File, folder = "assets"): Promise<string | null> {
+export async function dbUploadFile(file: File, folder = "assets", allowedTypes?: string[]): Promise<string | null> {
   if (!supabase) return null;
-  const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
+
+  // Block dangerous executable/script extensions
+  const ext = (file.name.includes(".") ? file.name.split(".").pop() || "" : "").toLowerCase();
+  const dangerousExts = ["html", "htm", "svg", "js", "mjs", "php", "sh", "exe", "cmd", "bat", "vbs", "jar", "py"];
+  if (dangerousExts.includes(ext)) {
+    console.error("Upload blocked: dangerous file extension", ext);
+    return null;
+  }
+
+  if (allowedTypes && allowedTypes.length > 0) {
+    const isAllowed = allowedTypes.some(type => {
+      if (type.endsWith("/*")) return file.type.startsWith(type.slice(0, -1));
+      return file.type === type;
+    });
+    if (!isAllowed) {
+      console.error("Upload blocked: unallowed file type", file.type);
+      return null;
+    }
+  }
+
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 40);
   const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
   const { error } = await supabase.storage.from("media").upload(path, file, {

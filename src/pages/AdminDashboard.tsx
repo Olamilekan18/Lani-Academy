@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar, Route, Bell } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, ExternalLink, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar, Route, Bell } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
 import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord, Pathway, AnalyticsEvent, AuditLog } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
@@ -66,6 +66,21 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   const [searchTerm, setSearchTerm] = useState("");
 
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const alertsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!alertsOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (alertsRef.current && !alertsRef.current.contains(e.target as Node)) setAlertsOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setAlertsOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [alertsOpen]);
+  const [proofModalTxn, setProofModalTxn] = useState<Transaction | null>(null);
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   useEffect(() => { dbGetAnalyticsEvents().then(setEvents).catch(() => {}); }, []);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -312,26 +327,43 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
 
   const [pathwayCourses, setPathwayCourses] = useState<string[]>([]);
   const [savingPathway, setSavingPathway] = useState(false);
+  const [pathwayCoverPreview, setPathwayCoverPreview] = useState<string>("");
   const togglePathwayCourse = (id: string) => setPathwayCourses((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const onPathwayCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    setPathwayCoverPreview(f ? URL.createObjectURL(f) : "");
+  };
   const handleSavePathwaySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
     const fd = new FormData(form);
     if (pathwayCourses.length === 0) { toast.error("Select at least one course."); return; }
     setSavingPathway(true);
-    await onSavePathway({
-      id: "path-" + Date.now().toString(36),
-      title: fd.get("ptitle") as string,
-      description: (fd.get("pdesc") as string) || "",
-      image: (fd.get("pimage") as string) || "",
-      courseIds: pathwayCourses,
-      price: Number(fd.get("pprice")) || 0,
-      featured: false,
-      published: fd.get("ppublished") === "on",
-    });
-    setSavingPathway(false);
-    setPathwayCourses([]);
-    form.reset();
+    try {
+      // Prefer an uploaded image; fall back to a pasted URL if provided.
+      const coverFile = fd.get("pcover") as File | null;
+      let image = (fd.get("pimage") as string) || "";
+      if (coverFile && coverFile.size > 0) {
+        const uploaded = await dbUploadFile(coverFile, "content");
+        if (!uploaded) { toast.error("Cover image upload failed."); setSavingPathway(false); return; }
+        image = uploaded;
+      }
+      await onSavePathway({
+        id: "path-" + Date.now().toString(36),
+        title: fd.get("ptitle") as string,
+        description: (fd.get("pdesc") as string) || "",
+        image,
+        courseIds: pathwayCourses,
+        price: Number(fd.get("pprice")) || 0,
+        featured: false,
+        published: fd.get("ppublished") === "on",
+      });
+      setPathwayCourses([]);
+      setPathwayCoverPreview("");
+      form.reset();
+    } finally {
+      setSavingPathway(false);
+    }
   };
 
   const [savingContent, setSavingContent] = useState(false);
@@ -391,7 +423,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
           <p className="text-xs text-slate-300 max-w-md">Manage courses, learners, payments, leads, applications, certificates and CMS assets.</p>
         </div>
         <div className="relative z-10 flex items-center gap-2">
-          <div className="relative">
+          <div className="relative" ref={alertsRef}>
             <button onClick={() => setAlertsOpen(!alertsOpen)} className="relative rounded-lg bg-white/10 border border-white/20 p-2.5 hover:bg-white/20 transition-all">
               <Bell size={18} />
               {totalAlerts > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-[10px] font-bold flex items-center justify-center">{totalAlerts}</span>}
@@ -680,11 +712,11 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
         <div>
           <div className="mb-4 flex items-center gap-3">
             <span className="text-xs font-bold text-slate-500">Total Revenue: <span className="text-lani-navy text-sm">{formatMoney(totalRevenue)}</span></span>
-            <button className="ml-auto btn-secondary min-h-9 px-3 text-xs gap-1" onClick={() => exportCsv("lani-transactions.csv", transactions.map(t => ({ receipt:t.receiptNumber, learner:t.learnerEmail, amount:t.amount, gateway:t.gateway, status:t.status, date:t.createdAt })))}><Download size={13}/>Export CSV</button>
+            <button className="ml-auto btn-secondary min-h-9 px-3 text-xs gap-1" onClick={() => exportCsv("lani-transactions.csv", transactions.map(t => ({ receipt:t.receiptNumber, learner:t.learnerEmail, amount:t.amount, gateway:t.gateway, status:t.status, date:t.createdAt, depositor: t.depositorName || "", bank: t.sourceBank || "", ref: t.transferReference || "" })))}><Download size={13}/>Export CSV</button>
           </div>
           <div className="table-shell border border-slate-200">
             <table>
-              <thead><tr><th>Receipt</th><th>Learner</th><th>Amount</th><th>Gateway</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+              <thead><tr><th>Receipt</th><th>Learner</th><th>Amount</th><th>Gateway</th><th>Transfer Proof</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {transactions.map(t => (
                   <tr key={t.id}>
@@ -692,9 +724,45 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                     <td className="text-xs">{t.learnerEmail}</td>
                     <td className="font-bold text-lani-navy">{formatMoney(t.amount)}</td>
                     <td className="text-xs">{t.gateway}</td>
+                    <td className="text-xs">
+                      {t.gateway === "Bank Transfer" ? (
+                        <div className="space-y-1 py-1">
+                          {t.depositorName && <div><span className="text-slate-400">Depositor:</span> <strong>{t.depositorName}</strong></div>}
+                          {t.sourceBank && <div><span className="text-slate-400">Bank:</span> <span>{t.sourceBank}</span></div>}
+                          {t.transferReference && <div><span className="text-slate-400">Ref:</span> <code className="font-mono text-[11px]">{t.transferReference}</code></div>}
+                          {t.receiptUrl ? (
+                            <a href={t.receiptUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold text-lani-green hover:underline text-[11px]">
+                              <ExternalLink size={12} /> View Receipt
+                            </a>
+                          ) : (
+                            !t.depositorName && !t.sourceBank && <span className="text-slate-400 italic">No details submitted</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
                     <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status==="Successful"||t.status==="Manually Confirmed"?"bg-lani-emerald/15 text-lani-green":t.status==="Pending"?"bg-amber-100 text-amber-700":"bg-red-50 text-red-600"}`}>{t.status}</span></td>
                     <td className="text-xs">{formatDate(t.createdAt)}</td>
-                    <td>{t.status==="Pending"&&<button onClick={() => onUpdatePaymentStatus(t.id,"Manually Confirmed")} className="text-xs font-bold text-lani-green hover:underline flex items-center gap-1"><CheckCircle size={12}/>Confirm</button>}</td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        {t.gateway === "Bank Transfer" && (
+                          <button onClick={() => setProofModalTxn(t)} className="text-xs font-bold text-lani-blue hover:underline flex items-center gap-1">
+                            <Eye size={12} /> Inspect Proof
+                          </button>
+                        )}
+                        {t.status === "Pending" && (
+                          <>
+                            <button onClick={() => onUpdatePaymentStatus(t.id, "Manually Confirmed")} className="text-xs font-bold text-lani-green hover:underline flex items-center gap-1">
+                              <CheckCircle size={12} /> Confirm
+                            </button>
+                            <button onClick={() => onUpdatePaymentStatus(t.id, "Failed")} className="text-xs font-bold text-red-600 hover:underline flex items-center gap-1">
+                              <XCircle size={12} /> Deny
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -842,7 +910,16 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="form-field sm:col-span-2">Title<input name="ptitle" required placeholder="e.g. Digital Transformation Officer"/></label>
               <label className="form-field sm:col-span-2">Description<textarea name="pdesc" rows={2} placeholder="What this pathway leads to"/></label>
-              <label className="form-field">Cover image URL<input name="pimage" placeholder="https://..."/></label>
+              <label className="form-field sm:col-span-2">Cover image
+                <input name="pcover" type="file" accept="image/*" onChange={onPathwayCoverChange}/>
+                <span className="mt-1 block text-[10px] text-slate-400">Select an image to upload, or paste a URL below.</span>
+              </label>
+              {pathwayCoverPreview && (
+                <div className="sm:col-span-2">
+                  <img src={pathwayCoverPreview} alt="Cover preview" className="h-32 w-full rounded-lg object-cover border border-slate-200"/>
+                </div>
+              )}
+              <label className="form-field">Cover image URL (optional)<input name="pimage" placeholder="https://..."/></label>
               <label className="form-field">Bundle price (NGN, 0 = sum)<input name="pprice" type="number" min={0} defaultValue={0}/></label>
             </div>
             <div>
@@ -1110,6 +1187,103 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Bank Transfer Proof Inspector Modal */}
+      {proofModalTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-lani-navy/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <button onClick={() => setProofModalTxn(null)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600">
+              <XCircle size={20} />
+            </button>
+            <h3 className="text-lg font-bold text-lani-navy">Bank Transfer Proof</h3>
+            <p className="text-xs text-slate-500 mt-0.5 mb-4">Receipt #{proofModalTxn.receiptNumber} — {formatDate(proofModalTxn.createdAt)}</p>
+
+            <div className="grid gap-3 text-xs text-slate-700 rounded-xl bg-slate-50 p-4 border border-slate-200">
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Learner Email:</span>
+                <strong className="text-lani-navy font-mono">{proofModalTxn.learnerEmail}</strong>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Course ID:</span>
+                <strong className="text-lani-navy">{proofModalTxn.courseId}</strong>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Amount Paid:</span>
+                <strong className="text-lani-green text-sm font-extrabold">{formatMoney(proofModalTxn.amount)}</strong>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Depositor Name:</span>
+                <strong className="text-lani-navy">{proofModalTxn.depositorName || "—"}</strong>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Source Bank:</span>
+                <strong className="text-lani-navy">{proofModalTxn.sourceBank || "—"}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Transfer Ref / Session ID:</span>
+                <code className="font-mono text-lani-navy">{proofModalTxn.transferReference || "—"}</code>
+              </div>
+            </div>
+
+            {/* Receipt Upload Preview / Link */}
+            <div className="mt-4">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Uploaded Receipt</span>
+              {proofModalTxn.receiptUrl ? (
+                <div className="space-y-3">
+                  {proofModalTxn.receiptUrl.match(/\.(jpeg|jpg|png|webp|gif)(\?.*)?$/i) ? (
+                    <img src={proofModalTxn.receiptUrl} alt="Payment Receipt" className="w-full max-h-64 rounded-xl border border-slate-200 object-contain bg-slate-150" />
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
+                      <FileText size={32} className="mx-auto text-lani-blue mb-1" />
+                      <span className="text-xs text-slate-600 font-semibold block">Document / PDF Receipt</span>
+                    </div>
+                  )}
+                  <a href={proofModalTxn.receiptUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary w-full justify-center text-xs gap-1.5">
+                    <ExternalLink size={14} /> Open Full Receipt in New Tab
+                  </a>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400 italic">
+                  No receipt image/file was attached by the learner.
+                </div>
+              )}
+            </div>
+
+            {/* Actions inside modal */}
+            <div className="flex items-center justify-between gap-3 mt-6 pt-4 border-t border-slate-100">
+              <span className="text-xs font-semibold text-slate-500">Status: <span className="font-bold text-lani-navy">{proofModalTxn.status}</span></span>
+              <div className="flex gap-2">
+                {proofModalTxn.status === "Pending" && (
+                  <>
+                    <button
+                      onClick={() => {
+                        onUpdatePaymentStatus(proofModalTxn.id, "Failed");
+                        setProofModalTxn(null);
+                      }}
+                      className="rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-100"
+                    >
+                      Deny Transfer
+                    </button>
+                    <button
+                      onClick={() => {
+                        onUpdatePaymentStatus(proofModalTxn.id, "Manually Confirmed");
+                        setProofModalTxn(null);
+                      }}
+                      className="btn-primary text-xs px-5"
+                    >
+                      Confirm & Approve Enrolment
+                    </button>
+                  </>
+                )}
+                {proofModalTxn.status !== "Pending" && (
+                  <button onClick={() => setProofModalTxn(null)} className="btn-secondary text-xs px-4">
+                    Close
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
