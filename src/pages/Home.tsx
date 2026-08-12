@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   Quote,
 } from "lucide-react";
-import type { Course, ThematicArea } from "../lib/types";
+import type { Course, ThematicArea, Sme } from "../lib/types";
 import { formatMoney } from "../lib/utils";
 
 interface HomeProps {
@@ -19,13 +19,14 @@ interface HomeProps {
   onNavigate: (view: any) => void;
   onOpenCourse: (course: Course) => void;
   onAddLead: (leadData: any) => Promise<void>;
+  smes?: Sme[];
 }
 
 const ACCENTS = ["bg-lani-green", "bg-lani-blue", "bg-lani-gold", "bg-cyan-600", "bg-indigo-600", "bg-emerald-600", "bg-rose-500", "bg-violet-600"];
 
 const MODES = ["Self-paced", "Instructor-led", "Virtual", "Physical", "Hybrid", "In-plant"];
 
-export default function Home({ courses, thematicAreas, onNavigate, onOpenCourse }: HomeProps) {
+export default function Home({ courses, thematicAreas, onNavigate, onOpenCourse, smes = [] }: HomeProps) {
   const [activeFaq, setActiveFaq] = useState<number | null>(0);
   const [activeTestimonial, setActiveTestimonial] = useState(0);
 
@@ -218,6 +219,49 @@ export default function Home({ courses, thematicAreas, onNavigate, onOpenCourse 
           ))}
         </div>
       </section>
+
+      {/* ── SUBJECT MATTER EXPERTS ───────────────────────── */}
+      {smes.filter((s) => s.published !== false).length > 0 && (
+        <section className="section">
+          <div className="page-header text-center">
+            <span className="eyebrow">Our Faculty</span>
+            <h2 className="mt-3 section-title">Meet our Subject Matter Experts</h2>
+            <p className="lead mx-auto mt-2 max-w-2xl">
+              Practitioners and specialists who design and deliver LANI Academy programmes across our core thematic areas.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {smes
+              .filter((s) => s.published !== false)
+              .map((sme) => (
+                <article
+                  key={sme.id}
+                  className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-soft hover:border-lani-green/20"
+                >
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={sme.image}
+                      alt={sme.name}
+                      loading="lazy"
+                      className="h-16 w-16 shrink-0 rounded-full border border-slate-200 object-cover"
+                    />
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-bold text-lani-navy">{sme.name}</h3>
+                      <p className="truncate text-xs font-semibold text-lani-green">{sme.title}</p>
+                      {sme.expertise && (
+                        <span className="mt-1.5 inline-flex rounded-full bg-lani-mist px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-lani-green">
+                          {sme.expertise}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm leading-6 text-slate-500 line-clamp-5">{sme.bio}</p>
+                </article>
+              ))}
+          </div>
+        </section>
+      )}
 
       {/* ── TESTIMONIAL ─────────────────────────────────── */}
       <section className="section bg-lani-navy text-white">

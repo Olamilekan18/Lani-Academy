@@ -32,7 +32,7 @@ import CoursePlayer from "./components/CoursePlayer";
 import CertificateModal from "./components/CertificateModal";
 
 import { supabase } from "./lib/supabase";
-import { courses as defaultCourses } from "./data/catalog";
+import { courses as defaultCourses, initialSmes } from "./data/catalog";
 
 import {
   dbGetCourses,
@@ -98,6 +98,9 @@ import {
   dbGetPathways,
   dbSavePathway,
   dbDeletePathway,
+  dbGetSmes,
+  dbSaveSme,
+  dbDeleteSme,
   dbGetReviews,
   dbSaveReview,
   dbMarkNotificationRead,
@@ -141,6 +144,7 @@ import type {
   AttendanceRecord,
   DiscussionPost,
   Pathway,
+  Sme,
   CourseReview
 } from "./lib/types";
 
@@ -167,6 +171,7 @@ export default function App() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [discussions, setDiscussions] = useState<DiscussionPost[]>([]);
   const [pathways, setPathways] = useState<Pathway[]>([]);
+  const [smes, setSmes] = useState<Sme[]>(initialSmes);
   const [reviews, setReviews] = useState<CourseReview[]>([]);
 
   // Mock data states for LMS features not yet in Supabase
@@ -252,7 +257,7 @@ export default function App() {
       const dbAssets = await dbGetAssets();
       setAssets(dbAssets);
 
-      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers, dbContent, dbAttendance, dbDiscussions, dbPathways, dbReviews] = await Promise.all([
+      const [dbPromos, dbSurveys, dbSurveyResponses, dbSubscribers, dbContent, dbAttendance, dbDiscussions, dbPathways, dbSmes, dbReviews] = await Promise.all([
         dbGetPromos(),
         dbGetSurveys(),
         dbGetSurveyResponses(),
@@ -261,6 +266,7 @@ export default function App() {
         dbGetAttendance(),
         dbGetDiscussions(),
         dbGetPathways(),
+        dbGetSmes(),
         dbGetReviews(),
       ]);
       setPromos(dbPromos);
@@ -271,6 +277,8 @@ export default function App() {
       setAttendance(dbAttendance);
       setDiscussions(dbDiscussions);
       setPathways(dbPathways);
+      // Fall back to the built-in experts when the table is empty (e.g. offline).
+      setSmes(dbSmes.length ? dbSmes : initialSmes);
       setReviews(dbReviews);
 
       // Load extended LMS features from Supabase
@@ -775,6 +783,18 @@ export default function App() {
     await loadDatabase();
   };
 
+  const handleSaveSme = async (sme: Partial<Sme>) => {
+    const ok = await dbSaveSme(sme);
+    await loadDatabase();
+    if (ok) toast.success("Expert saved");
+    else toast.error("Could not save expert.");
+  };
+
+  const handleDeleteSme = async (id: string) => {
+    await dbDeleteSme(id);
+    await loadDatabase();
+  };
+
   const handleSaveReview = async (review: Partial<CourseReview>) => {
     const learnerEmail = profile?.email || user?.email || "";
     const learnerName = profile?.full_name || "Learner";
@@ -1103,9 +1123,10 @@ export default function App() {
             onNavigate={navigateToView}
             onOpenCourse={handleOpenCourse}
             onAddLead={handleAddLead}
+            smes={smes}
           />
         } />
-        
+
         <Route path="/courses" element={
           selectedCourse ? (
             <CourseDetail
@@ -1262,6 +1283,9 @@ export default function App() {
             pathways={pathways}
             onSavePathway={handleSavePathway}
             onDeletePathway={handleDeletePathway}
+            smes={smes}
+            onSaveSme={handleSaveSme}
+            onDeleteSme={handleDeleteSme}
             onUpdateLeadStage={handleUpdateLeadStage}
             onUpdateAppStatus={handleUpdateAppStatus}
             onConvertApplicant={handleConvertApplicant}

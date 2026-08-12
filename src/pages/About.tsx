@@ -69,18 +69,20 @@ export default function About({ onNavigate }: AboutProps) {
             <div className="feature-icon"><Target size={20} /></div>
             <h2 className="mt-4 text-xl font-bold text-lani-navy">Our Mission</h2>
             <p className="mt-2 text-sm leading-7 text-slate-500">
-              To empower individuals and organisations with the technical, digital and business
-              capabilities they need for growth, excellence and sustainable success — delivered
-              through a professional, premium and future-ready learning experience.
+              As the training and capacity-development arm of LANI Consulting, to empower individuals
+              and organisations through programmes that support growth, excellence and sustainable
+              success — strengthening technical, digital and business skills across Management, Human
+              Capital, Finance, ICT, Fintech, Agriculture and Development.
             </p>
           </div>
           <div className="info-card">
             <div className="feature-icon"><Compass size={20} /></div>
             <h2 className="mt-4 text-xl font-bold text-lani-navy">Our Vision</h2>
             <p className="mt-2 text-sm leading-7 text-slate-500">
-              To be a premium, integrated, payment-enabled and certification-ready hybrid learning
-              platform connecting people, professionals and institutions to measurable training
-              solutions across LANI Consulting's core thematic areas.
+              LANI Academy will be a premium, integrated, payment-enabled, certification-ready and
+              hybrid learning platform that connects individuals, professionals, corporate
+              organisations, institutions and development partners to practical, sector-relevant and
+              measurable training solutions across LANI Consulting's core thematic areas.
             </p>
           </div>
         </div>

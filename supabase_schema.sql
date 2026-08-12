@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     avatar_url TEXT,
     bio TEXT,
     qualifications TEXT,
+    intro_video_url TEXT,
+    cv_url TEXT,
     country TEXT,
     state_region TEXT,
     city TEXT,
@@ -27,6 +29,10 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     date_of_birth DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
+
+-- Backfill columns for existing deployments (idempotent)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS intro_video_url TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cv_url TEXT;
 
 -- Enable RLS for Profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -765,6 +771,30 @@ CREATE POLICY "Published pathways are public" ON public.pathways FOR SELECT USIN
 );
 DROP POLICY IF EXISTS "Admins manage pathways" ON public.pathways;
 CREATE POLICY "Admins manage pathways" ON public.pathways FOR ALL USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin','super_admin'))
+);
+
+-- ============================================================
+-- Subject Matter Experts (landing page + admin managed)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.smes (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  title TEXT,
+  expertise TEXT,
+  bio TEXT,
+  image TEXT,
+  published BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.smes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Published smes are public" ON public.smes;
+CREATE POLICY "Published smes are public" ON public.smes FOR SELECT USING (
+  published = true
+  OR EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin','super_admin'))
+);
+DROP POLICY IF EXISTS "Admins manage smes" ON public.smes;
+CREATE POLICY "Admins manage smes" ON public.smes FOR ALL USING (
   EXISTS (SELECT 1 FROM public.profiles WHERE public.profiles.id = auth.uid() AND public.profiles.role IN ('admin','super_admin'))
 );
 

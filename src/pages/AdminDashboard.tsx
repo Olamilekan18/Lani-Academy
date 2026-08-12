@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Shield, Users, Award, DollarSign, TrendingUp, FileText, Upload, RefreshCw, BarChart2, BookOpen, CreditCard, ClipboardCheck, Megaphone, Settings, Download, Search, Edit, Trash2, CheckCircle, XCircle, ExternalLink, Eye, Plus, ArrowLeft, Save, Tag, Send, Calendar, Route, Bell } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord, Pathway, AnalyticsEvent, AuditLog } from "../lib/types";
+import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord, Pathway, Sme, AnalyticsEvent, AuditLog } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { seedDatabase, dbUploadFile, dbGetAnalyticsEvents, dbGetAuditLogs } from "../lib/db";
 import CourseEditor from "../components/CourseEditor";
 import SessionScheduler from "../components/SessionScheduler";
 import toast from "react-hot-toast";
 
-type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"content"|"pathways"|"sessions"|"promos"|"broadcast"|"audit";
+type Tab = "overview"|"courses"|"learners"|"payments"|"leads"|"applications"|"certificates"|"cms"|"content"|"pathways"|"experts"|"sessions"|"promos"|"broadcast"|"audit";
 
 interface Props {
   courses: Course[];
@@ -29,6 +29,9 @@ interface Props {
   pathways: Pathway[];
   onSavePathway: (p: Partial<Pathway>) => Promise<void> | void;
   onDeletePathway: (id: string) => Promise<void> | void;
+  smes: Sme[];
+  onSaveSme: (s: Partial<Sme>) => Promise<void> | void;
+  onDeleteSme: (id: string) => Promise<void> | void;
   onSavePromo: (p: Partial<PromoCode>) => Promise<void> | void;
   onBroadcast: (emails: string[], subject: string, message: string) => Promise<void> | void;
   onSaveContent: (i: Partial<ContentItem>) => Promise<void> | void;
@@ -48,7 +51,7 @@ interface Props {
 
 const COLORS = ["#087443","#0b66c3","#c9972b","#d95845","#10a768","#6366f1","#ec4899","#14b8a6"];
 
-export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, facilitatorAssignments, promos, subscribers, content, calendarEvents, attendance, onSaveAttendance, pathways, onSavePathway, onDeletePathway, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onSaveEvent, onDeleteEvent, onUpdateLeadStage, onUpdateAppStatus, onConvertApplicant, onUpdateCertificateStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
+export default function AdminDashboard({ courses, enrollments, transactions, certificates, leads, applications, assets, facilitators, facilitatorAssignments, promos, subscribers, content, calendarEvents, attendance, onSaveAttendance, pathways, onSavePathway, onDeletePathway, smes, onSaveSme, onDeleteSme, onSavePromo, onBroadcast, onSaveContent, onDeleteContent, onSaveEvent, onDeleteEvent, onUpdateLeadStage, onUpdateAppStatus, onConvertApplicant, onUpdateCertificateStatus, onAddAsset, onAddCourse, onAssignFacilitator, onRefreshData, onUpdatePaymentStatus }: Props) {
   const [tab, setTab] = useState<Tab>(() => {
     try { return (localStorage.getItem("lani-admin-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
@@ -282,6 +285,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     {key:"cms",label:"CMS Assets",icon:FileText,count:assets.length},
     {key:"content",label:"Articles & Resources",icon:Edit,count:content.length},
     {key:"pathways",label:"Pathways",icon:Route,count:pathways.length},
+    {key:"experts",label:"Experts (SMEs)",icon:Users,count:smes.length},
     {key:"sessions",label:"Sessions",icon:Calendar,count:calendarEvents.length},
     {key:"promos",label:"Promo Codes",icon:Tag,count:promos.length},
     {key:"broadcast",label:"Broadcast",icon:Send},
@@ -363,6 +367,63 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
       form.reset();
     } finally {
       setSavingPathway(false);
+    }
+  };
+
+  // Subject Matter Experts editor
+  const [savingSme, setSavingSme] = useState(false);
+  const [smePhotoPreview, setSmePhotoPreview] = useState<string>("");
+  const [editingSmeId, setEditingSmeId] = useState<string | null>(null);
+  const smeFormRef = useRef<HTMLFormElement>(null);
+  const onSmePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    setSmePhotoPreview(f ? URL.createObjectURL(f) : "");
+  };
+  const startEditSme = (s: Sme) => {
+    setEditingSmeId(s.id);
+    setSmePhotoPreview(s.image || "");
+    const form = smeFormRef.current;
+    if (form) {
+      (form.elements.namedItem("sname") as HTMLInputElement).value = s.name || "";
+      (form.elements.namedItem("stitle") as HTMLInputElement).value = s.title || "";
+      (form.elements.namedItem("sexpertise") as HTMLInputElement).value = s.expertise || "";
+      (form.elements.namedItem("sbio") as HTMLTextAreaElement).value = s.bio || "";
+      (form.elements.namedItem("simage") as HTMLInputElement).value = s.image || "";
+      (form.elements.namedItem("spublished") as HTMLInputElement).checked = s.published !== false;
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+  const resetSmeForm = () => {
+    setEditingSmeId(null);
+    setSmePhotoPreview("");
+    smeFormRef.current?.reset();
+  };
+  const handleSaveSmeSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    setSavingSme(true);
+    try {
+      const photoFile = fd.get("sphoto") as File | null;
+      let image = (fd.get("simage") as string) || "";
+      if (photoFile && photoFile.size > 0) {
+        const uploaded = await dbUploadFile(photoFile, "experts", ["image/*"]);
+        if (!uploaded) { toast.error("Photo upload failed (max 5MB, image only)."); setSavingSme(false); return; }
+        image = uploaded;
+      }
+      if (!image) { toast.error("Add a photo (upload or URL)."); setSavingSme(false); return; }
+      await onSaveSme({
+        id: editingSmeId || "sme-" + Date.now().toString(36),
+        name: fd.get("sname") as string,
+        title: (fd.get("stitle") as string) || "",
+        expertise: (fd.get("sexpertise") as string) || "",
+        bio: (fd.get("sbio") as string) || "",
+        image,
+        published: fd.get("spublished") === "on",
+      });
+      resetSmeForm();
+    } finally {
+      setSavingSme(false);
     }
   };
 
@@ -953,6 +1014,63 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                 </tbody>
               </table>
             ) : <div className="py-16 text-center"><Route className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No pathways yet</h3></div>}
+          </div>
+        </div>
+      )}
+
+      {/* SUBJECT MATTER EXPERTS */}
+      {tab === "experts" && (
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+          <form ref={smeFormRef} className="form-panel border border-slate-200" onSubmit={handleSaveSmeSubmit}>
+            <div className="flex items-center justify-between">
+              <div><span className="eyebrow">Faculty</span><h2 className="mt-3 text-lg font-bold text-lani-navy">{editingSmeId ? "Edit Expert" : "Add Subject Matter Expert"}</h2></div>
+              {editingSmeId && <button type="button" onClick={resetSmeForm} className="text-xs font-bold text-slate-500 hover:text-lani-blue">Cancel edit</button>}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="form-field">Full name<input name="sname" required placeholder="e.g. Dr. Amaka Obi"/></label>
+              <label className="form-field">Title / role<input name="stitle" required placeholder="e.g. Digital Transformation Lead"/></label>
+              <label className="form-field sm:col-span-2">Expertise / thematic area<input name="sexpertise" placeholder="e.g. ICT and Digital Transformation"/></label>
+              <label className="form-field sm:col-span-2">Bio<textarea name="sbio" rows={4} required placeholder="A short professional biography..."/></label>
+              <label className="form-field sm:col-span-2">Photo
+                <input name="sphoto" type="file" accept="image/*" onChange={onSmePhotoChange}/>
+                <span className="mt-1 block text-[10px] text-slate-400">Upload a headshot (max 5MB), or paste a URL below.</span>
+              </label>
+              {smePhotoPreview && (
+                <div className="sm:col-span-2">
+                  <img src={smePhotoPreview} alt="Photo preview" className="h-24 w-24 rounded-full object-cover border border-slate-200"/>
+                </div>
+              )}
+              <label className="form-field sm:col-span-2">Photo URL (optional)<input name="simage" placeholder="https://..."/></label>
+            </div>
+            <label className="flex items-center gap-2 text-sm font-semibold text-lani-navy"><input name="spublished" type="checkbox" defaultChecked className="h-4 w-4 accent-lani-green"/> Published (visible on landing page)</label>
+            <button type="submit" disabled={savingSme} className="btn-primary w-full justify-center text-xs"><Users size={14}/>{savingSme ? "Saving..." : editingSmeId ? "Update Expert" : "Save Expert"}</button>
+          </form>
+          <div className="table-shell border border-slate-200">
+            {smes.length > 0 ? (
+              <table>
+                <thead><tr><th>Expert</th><th>Expertise</th><th>Status</th><th></th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {smes.map(s => (
+                    <tr key={s.id}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <img src={s.image} alt={s.name} className="h-9 w-9 shrink-0 rounded-full object-cover border border-slate-200"/>
+                          <div className="min-w-0"><strong>{s.name}</strong><span className="line-clamp-1">{s.title}</span></div>
+                        </div>
+                      </td>
+                      <td className="text-xs">{s.expertise}</td>
+                      <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${s.published!==false?"bg-lani-emerald/15 text-lani-green":"bg-slate-100 text-slate-500"}`}>{s.published!==false?"Published":"Hidden"}</span></td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => startEditSme(s)} className="text-slate-400 hover:text-lani-blue" title="Edit"><Edit size={14}/></button>
+                          <button onClick={() => onDeleteSme(s.id)} className="text-red-500 hover:text-red-600" title="Delete"><Trash2 size={14}/></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <div className="py-16 text-center"><Users className="mx-auto text-slate-300" size={44}/><h3 className="mt-4 text-base font-bold text-lani-navy">No experts yet</h3></div>}
           </div>
         </div>
       )}

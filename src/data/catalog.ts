@@ -6,6 +6,7 @@ import type {
   DeliveryMode,
   Enrollment,
   ProgrammeApplication,
+  Sme,
   ThematicArea,
   Transaction,
 } from "../lib/types";
@@ -78,7 +79,7 @@ export const deliveryModes: DeliveryMode[] = [
   "In-plant",
 ];
 
-export const courses: Course[] = [
+const baseCourses: Course[] = [
   {
     id: "digital-transformation-officer",
     title: "Digital Transformation Officer Pathway",
@@ -473,6 +474,37 @@ export const courses: Course[] = [
   },
 ];
 
+// Working sample resources so the learner course player has functional
+// accompanying materials and a playable lesson video out of the box. These are
+// only used as defaults — as soon as a facilitator or admin uploads real files
+// (which persist to Supabase), those take precedence.
+//
+// Materials are attached PER LESSON (each lesson gets its own PDF). Course- and
+// module-level materials stay empty by default and are populated only when a
+// facilitator/admin uploads them via the course editor.
+const SAMPLE_VIDEO_URL =
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+const SAMPLE_LESSON_PDF_URL =
+  "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+
+export const courses: Course[] = baseCourses.map((course) => ({
+  ...course,
+  videoUrl: course.videoUrl ?? SAMPLE_VIDEO_URL,
+  materialFiles: course.materialFiles ?? [],
+  modules: course.modules.map((m) => ({
+    ...m,
+    lessonMaterials:
+      m.lessonMaterials && Object.keys(m.lessonMaterials).length
+        ? m.lessonMaterials
+        : Object.fromEntries(
+            m.lessons.map((lesson) => [
+              lesson,
+              [{ name: `${lesson} — Notes.pdf`, url: SAMPLE_LESSON_PDF_URL }],
+            ])
+          ),
+  })),
+}));
+
 export const applicationProgrammes = [
   {
     type: "Bootcamp",
@@ -678,5 +710,71 @@ export const initialCmsAssets: CmsAsset[] = [
     placement: "Application portal",
     owner: "Programme Team",
     status: "Draft",
+  },
+];
+
+// Default Subject Matter Experts shown on the landing page. Admins can edit,
+// add, or remove these from the Admin → Experts tab (changes persist to Supabase).
+// Photos are free-to-use placeholder portraits — replace with real headshots.
+export const initialSmes: Sme[] = [
+  {
+    id: "sme-001",
+    name: "Dr. Amaka Obi",
+    title: "Lead, Digital Transformation & ICT",
+    expertise: "ICT and Digital Transformation",
+    bio: "Amaka has spent 15 years helping banks and public institutions modernise their operations — from cloud migration and data analytics to Power Platform automation. She holds a Ph.D. in Information Systems and has led enterprise digital programmes across West Africa.",
+    image: "https://images.unsplash.com/photo-1769636930016-5d9f0ca653aa?w=400&h=400&fit=crop&crop=faces&auto=format&q=70",
+    published: true,
+    createdAt: "2026-01-05",
+  },
+  {
+    id: "sme-002",
+    name: "Tunde Bakare",
+    title: "Human Capital & Leadership Faculty",
+    expertise: "Human Capital Development",
+    bio: "A certified corporate trainer and executive coach, Tunde designs leadership and performance-management programmes for high-growth teams. He has facilitated over 200 workshops and specialises in turning strategy into everyday management practice.",
+    image: "https://images.unsplash.com/photo-1769636929354-59165ba73c7e?w=400&h=400&fit=crop&crop=faces&auto=format&q=70",
+    published: true,
+    createdAt: "2026-01-06",
+  },
+  {
+    id: "sme-003",
+    name: "Fatima Bello",
+    title: "Finance, Risk & Compliance Specialist",
+    expertise: "Finance, Risk, Tax and Compliance",
+    bio: "Fatima is a chartered accountant and former head of internal audit with deep expertise in tax, credit analysis and regulatory compliance. She translates complex financial controls into practical, exam-ready and workplace-ready training.",
+    image: "https://images.unsplash.com/photo-1769636929388-99eff95d3bf1?w=400&h=400&fit=crop&crop=faces&auto=format&q=70",
+    published: true,
+    createdAt: "2026-01-07",
+  },
+  {
+    id: "sme-004",
+    name: "Samuel Adeyemi",
+    title: "Agribusiness & Value Chain Advisor",
+    expertise: "Agribusiness and Livelihoods",
+    bio: "Samuel works with cooperatives and agro-processors to build resilient value chains. His sessions cover agribusiness planning, market access and cooperative governance, drawing on a decade of fieldwork across rural Nigeria and East Africa.",
+    image: "https://images.unsplash.com/photo-1595211877493-41a4e5f236b3?w=400&h=400&fit=crop&crop=faces&auto=format&q=70",
+    published: true,
+    createdAt: "2026-01-08",
+  },
+  {
+    id: "sme-005",
+    name: "Grace Okafor",
+    title: "Sustainability & ESG Practitioner",
+    expertise: "Sustainability and ESG",
+    bio: "Grace advises organisations on ESG strategy, climate risk and sustainable supply chains. A frequent conference speaker, she helps teams move from ESG reporting obligations to measurable, credible sustainability action.",
+    image: "https://images.unsplash.com/photo-1769636929266-8057f2c5ed52?w=400&h=400&fit=crop&crop=faces&auto=format&q=70",
+    published: true,
+    createdAt: "2026-01-09",
+  },
+  {
+    id: "sme-006",
+    name: "Ngozi Eze",
+    title: "Management & Strategy Consultant",
+    expertise: "Management and Strategy Consulting",
+    bio: "Ngozi partners with executive teams on strategic planning, business-process improvement and change management. She brings 12 years of consulting experience and a pragmatic, outcomes-first approach to capability building.",
+    image: "https://images.unsplash.com/photo-1769636929130-56648d6e9c6d?w=400&h=400&fit=crop&crop=faces&auto=format&q=70",
+    published: true,
+    createdAt: "2026-01-10",
   },
 ];

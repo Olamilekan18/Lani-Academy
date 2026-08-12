@@ -15,6 +15,7 @@ import {
 import type { Course, CourseReview } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { supabase } from "../lib/supabase";
+import AskAI from "../components/AskAI";
 
 type CourseDetailTab = "overview" | "curriculum" | "objectives" | "audience" | "reviews";
 
@@ -36,6 +37,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
   );
   const [expandedModule, setExpandedModule] = useState<number | null>(0);
   const [facProfile, setFacProfile] = useState<any>(null);
+  const [askOpen, setAskOpen] = useState(false);
 
   const myReview = reviews.find((r) => r.learnerEmail === currentUserEmail);
   const [rating, setRating] = useState<number>(myReview?.rating || 0);
@@ -352,6 +354,25 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
             </div>
           </div>
 
+          {/* AI Study Assistant */}
+          <div className="rounded-2xl border border-lani-blue/20 bg-gradient-to-br from-lani-mist to-white p-6 shadow-sm text-left grid gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-lani-blue to-lani-emerald text-white shadow">
+                <Sparkles size={18} />
+              </div>
+              <h3 className="text-xs uppercase font-bold text-lani-navy tracking-wider">AI Study Assistant</h3>
+            </div>
+            <p className="text-[11px] leading-5 text-slate-500">
+              Ask questions about this course, get plain-language explanations, and quiz yourself — anytime.
+            </p>
+            <button
+              onClick={() => setAskOpen(true)}
+              className="btn-secondary w-full justify-center min-h-10 text-xs font-bold border-lani-blue/30 text-lani-blue hover:bg-lani-blue/5"
+            >
+              <Sparkles size={14} /> Ask AI about this course
+            </button>
+          </div>
+
           {/* Facilitator / Material list summary widget */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-left grid gap-4">
             <h3 className="text-xs uppercase font-bold text-lani-navy tracking-wider">Included Resources</h3>
@@ -367,6 +388,17 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
         </div>
 
       </div>
+
+      <AskAI
+        open={askOpen}
+        onClose={() => setAskOpen(false)}
+        context={{
+          courseTitle: course.title,
+          courseCode: course.code,
+          shortDescription: course.shortDescription,
+          outcomes: course.outcomes,
+        }}
+      />
     </div>
   );
 }

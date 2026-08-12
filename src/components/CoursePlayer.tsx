@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { X, PlayCircle, Download, FileText, CheckCircle2, Check, Eye, Image as ImageIcon, ExternalLink, Bookmark, StickyNote, Loader2, Lock } from "lucide-react";
+import { X, PlayCircle, Download, FileText, CheckCircle2, Check, Eye, Image as ImageIcon, ExternalLink, Bookmark, StickyNote, Loader2, Lock, Sparkles, ListChecks } from "lucide-react";
 import type { Course, Enrollment, LessonNote } from "../lib/types";
 import { dbGetNotes, dbSaveNote } from "../lib/db";
+import AskAI from "./AskAI";
 import toast from "react-hot-toast";
 
 interface CoursePlayerProps {
@@ -74,6 +75,8 @@ export default function CoursePlayer({
   const [notes, setNotes] = useState<Record<string, { body: string; bookmarked: boolean }>>({});
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false); // mobile drawer
   useEffect(() => {
     dbGetNotes(enrollment.learnerEmail)
       .then((rows: LessonNote[]) => {
@@ -101,6 +104,16 @@ export default function CoursePlayer({
   const moduleMaterials = activeModule?.materials || [];
   const lessonMaterials = activeModule?.lessonMaterials?.[activeLesson.lessonTitle] || [];
   const activeNote = notes[activeLesson.lessonTitle];
+
+  // Every real (viewable) material shown for the active lesson — lesson, module,
+  // and course scopes. All of these must be opened before the learner can
+  // complete and continue. De-duplicated by URL so a file shared across scopes
+  // only needs to be opened once.
+  const requiredMaterials = Array.from(
+    new Map([...lessonMaterials, ...moduleMaterials, ...materialFiles].map((m) => [m.url, m])).values()
+  );
+  const openedMaterials = requiredMaterials.filter((m) => completed.includes(materialId(m.url)));
+  const allMaterialsOpened = openedMaterials.length === requiredMaterials.length;
 
   // Keep the note textarea in sync with the active lesson
   useEffect(() => {
@@ -208,68 +221,104 @@ export default function CoursePlayer({
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 text-white">
       {/* Top Header */}
-      <header className="flex h-16 items-center justify-between border-b border-slate-800 bg-slate-900 px-6">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
+      <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <button type="button" onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
             <X size={20} />
           </button>
-          <div>
-            <h1 className="max-w-sm truncate text-sm font-bold sm:max-w-md">{course.title}</h1>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-bold">{course.title}</h1>
             <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
-              <span>{course.code}</span>
+              <span className="truncate">{course.code}</span>
               <span>•</span>
-              <span>Progress: {pct}%</span>
+              <span className="shrink-0">{pct}%</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="hidden h-2 w-36 overflow-hidden rounded-full bg-slate-800 sm:block">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="hidden h-2 w-28 overflow-hidden rounded-full bg-slate-800 lg:block xl:w-36">
             <div className="h-full bg-lani-green transition-all duration-300" style={{ width: `${pct}%` }} />
           </div>
-          <button onClick={onClose} className="btn-primary min-h-9 px-4 text-xs">Save & Exit</button>
+          <button
+            onClick={() => setAskOpen(true)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-lani-blue/40 bg-lani-blue/10 px-2.5 text-xs font-bold text-lani-blue hover:bg-lani-blue/20 sm:px-3"
+          >
+            <Sparkles size={14} /> <span className="hidden sm:inline">Ask AI</span>
+          </button>
+          <button onClick={onClose} className="btn-primary min-h-9 px-3 text-xs sm:px-4">Save<span className="hidden sm:inline"> &amp; Exit</span></button>
+          {/* Mobile-only outline toggle */}
+          <button
+            type="button"
+            onClick={() => setOutlineOpen(true)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 text-xs font-bold text-slate-200 hover:bg-slate-700 lg:hidden"
+          >
+            <ListChecks size={15} /> <span className="hidden sm:inline">Lessons</span>
+          </button>
         </div>
       </header>
 
       {/* Main Split Body */}
       <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Left Side: Video & Details */}
-        <div className="flex flex-1 flex-col overflow-y-auto bg-slate-950 p-6 lg:p-8">
-          <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
-            {course.videoUrl ? (
-              renderVideo(course.videoUrl)
-            ) : (
-              <>
-                <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 to-slate-900 opacity-60" />
-                <div className="relative z-10 px-4 text-center">
-                  <PlayCircle size={64} className="mx-auto mb-4 animate-pulse text-lani-gold" />
-                  <span className="eyebrow border-white/20 bg-white/5 text-white/90">Lesson Video</span>
-                  <h3 className="mt-3 text-xl font-bold leading-tight">{activeLesson.lessonTitle}</h3>
-                  <p className="mt-1.5 text-xs text-slate-400">Module: {activeLesson.moduleTitle}</p>
-                  <p className="mt-3 text-[11px] text-slate-500">No video uploaded yet — your facilitator will add one soon.</p>
-                </div>
-              </>
-            )}
+        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-slate-950 p-3 sm:p-6 lg:p-8">
+          {/* Video is sized to fill the available width but never taller than the
+              viewport (so it stays large on desktop), and goes edge-to-edge on
+              small screens so it isn't a tiny strip. */}
+          <div className="mx-auto w-full max-w-[calc((100dvh_-_11rem)*16/9)] max-sm:-mx-3 max-sm:w-auto max-sm:max-w-none">
+            <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl max-sm:rounded-none max-sm:border-x-0">
+              {course.videoUrl ? (
+                renderVideo(course.videoUrl)
+              ) : (
+                <>
+                  <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 to-slate-900 opacity-60" />
+                  <div className="relative z-10 px-4 text-center">
+                    <PlayCircle size={64} className="mx-auto mb-4 animate-pulse text-lani-gold" />
+                    <span className="eyebrow border-white/20 bg-white/5 text-white/90">Lesson Video</span>
+                    <h3 className="mt-3 text-xl font-bold leading-tight">{activeLesson.lessonTitle}</h3>
+                    <p className="mt-1.5 text-xs text-slate-400">Module: {activeLesson.moduleTitle}</p>
+                    <p className="mt-3 text-[11px] text-slate-500">No video uploaded yet — your facilitator will add one soon.</p>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {isComplete && (
-            <div className="mt-6 flex items-center gap-3 rounded-xl border border-lani-emerald/30 bg-lani-emerald/10 p-4 text-sm font-semibold text-lani-green">
+            <div className="mx-auto mt-6 flex w-full max-w-5xl items-center gap-3 rounded-xl border border-lani-emerald/30 bg-lani-emerald/10 p-4 text-sm font-semibold text-lani-green">
               <CheckCircle2 size={20} />
               Course complete — your certificate has been issued. Close the player to view it in your dashboard.
             </div>
           )}
 
           {/* Lesson Resources & Downloads */}
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
+          <div className="mx-auto mt-6 grid w-full max-w-5xl gap-6 sm:mt-8 md:grid-cols-2">
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h2 className="text-md font-bold tracking-tight text-white">Active Lesson Guide</h2>
               <p className="mt-3 text-sm leading-6 text-slate-400">
                 {activeReleased
-                  ? <>In this segment of <strong>{activeLesson.lessonTitle}</strong>, we cover key concepts, business applications, and case references. Open the accompanying materials below — each one you view counts toward your progress.</>
+                  ? <>In this segment of <strong>{activeLesson.lessonTitle}</strong>, we cover key concepts, business applications, and case references. Open every accompanying material below to unlock <strong>Complete and Continue</strong>.</>
                   : "This content hasn't been released yet. Check back when your facilitator publishes the next module — it's already counted in your course total."}
               </p>
-              <button type="button" onClick={handleNextLesson} disabled={!activeReleased} className="btn-primary mt-6 w-full justify-center text-xs disabled:opacity-50">
-                {activeReleased ? "Complete and Continue" : "Not yet available"}
+
+              {activeReleased && requiredMaterials.length > 0 && !allMaterialsOpened && (
+                <div className="mt-4 flex items-center gap-2 rounded-lg border border-lani-gold/30 bg-lani-gold/10 p-3 text-[11px] font-semibold text-lani-gold">
+                  <Lock size={13} className="shrink-0" />
+                  Open all materials to continue — {openedMaterials.length} of {requiredMaterials.length} viewed.
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleNextLesson}
+                disabled={!activeReleased || !allMaterialsOpened}
+                className="btn-primary mt-6 w-full justify-center text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {!activeReleased
+                  ? "Not yet available"
+                  : !allMaterialsOpened
+                  ? `Open all materials (${openedMaterials.length}/${requiredMaterials.length})`
+                  : "Complete and Continue"}
               </button>
             </div>
 
@@ -296,21 +345,32 @@ export default function CoursePlayer({
               )}
 
               <div className="mt-4">
-                {(materialFiles.length > 0 || moduleMaterials.length > 0 || lessonMaterials.length > 0) && (
+                {(materialFiles.length > 0 || moduleMaterials.length > 0 || lessonMaterials.length > 0 || course.materials.length > 0) && (
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Course materials</p>
                 )}
                 <div className="mt-2 grid gap-3">
                   {materialFiles.length > 0 ? (
                     materialFiles.map((f, i) => <MaterialRow key={`c-${i}`} f={{ ...f, scope: "course" }} />)
                   ) : course.materials.length > 0 ? (
+                    // Legacy name-only entries have no file behind them yet — show a
+                    // clear "coming soon" state instead of a dead, click-looking row.
                     course.materials.map((m, i) => (
-                      <div key={i} className="flex items-center gap-2 rounded-lg bg-slate-900 p-3 text-xs font-semibold text-slate-400">
-                        <FileText size={16} className="shrink-0 text-lani-gold" />
-                        <span className="truncate">{m}</span>
+                      <div key={i} className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-slate-800 bg-slate-900/40 p-3 text-xs font-semibold text-slate-500">
+                        <span className="flex items-center gap-2 truncate">
+                          <FileText size={16} className="shrink-0 text-slate-600" />
+                          <span className="truncate">{m}</span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                          <Lock size={11} /> Coming soon
+                        </span>
                       </div>
                     ))
                   ) : moduleMaterials.length === 0 && lessonMaterials.length === 0 ? (
-                    <p className="text-xs text-slate-500">No materials uploaded yet.</p>
+                    <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/40 p-4 text-center">
+                      <FileText size={20} className="mx-auto mb-1.5 text-slate-600" />
+                      <p className="text-xs font-semibold text-slate-400">No materials yet</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">Your facilitator will add resources here soon.</p>
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -318,7 +378,7 @@ export default function CoursePlayer({
           </div>
 
           {/* My Notes for the active lesson */}
-          <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+          <div className="mx-auto mt-6 w-full max-w-5xl rounded-xl border border-slate-800 bg-slate-900/50 p-5 sm:p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-md font-bold tracking-tight text-white flex items-center gap-2"><StickyNote size={16} className="text-lani-gold"/>My Notes</h2>
               <button
@@ -343,11 +403,33 @@ export default function CoursePlayer({
           </div>
         </div>
 
-        {/* Right Side: Navigation Syllabus List */}
-        <div className="flex w-full flex-col overflow-hidden border-t border-slate-800 bg-slate-900 lg:w-96 lg:border-l lg:border-t-0">
-          <div className="border-b border-slate-800 bg-slate-900/80 p-4">
-            <h2 className="text-sm font-bold tracking-tight text-white">Course Outline</h2>
-            <p className="mt-1 text-xs text-slate-400">Click a topic to launch video</p>
+        {/* Mobile backdrop when the outline drawer is open */}
+        {outlineOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm lg:hidden"
+            onClick={() => setOutlineOpen(false)}
+          />
+        )}
+
+        {/* Right Side: Navigation Syllabus List.
+            Static side column on desktop; slide-in drawer on mobile. */}
+        <div
+          className={`fixed inset-y-0 right-0 z-40 flex w-80 max-w-[85%] flex-col overflow-hidden border-l border-slate-800 bg-slate-900 shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:w-96 lg:max-w-none lg:translate-x-0 lg:border-t-0 lg:shadow-none ${
+            outlineOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
+          <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 p-4">
+            <div>
+              <h2 className="text-sm font-bold tracking-tight text-white">Course Outline</h2>
+              <p className="mt-1 text-xs text-slate-400">Tap a topic to launch its video</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOutlineOpen(false)}
+              className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden"
+            >
+              <X size={18} />
+            </button>
           </div>
 
           <div className="divide-y divide-slate-850 flex-1 overflow-y-auto">
@@ -390,7 +472,7 @@ export default function CoursePlayer({
                       >
                         <button
                           type="button"
-                          onClick={() => setActiveLessonIndex(idx)}
+                          onClick={() => { setActiveLessonIndex(idx); setOutlineOpen(false); }}
                           className="flex flex-1 items-start gap-2.5 text-left focus:outline-none"
                         >
                           <PlayCircle size={14} className={`mt-0.5 shrink-0 ${isActive ? "text-white" : "text-slate-500 group-hover:text-slate-300"}`} />
@@ -443,6 +525,19 @@ export default function CoursePlayer({
           <div className="flex flex-1 overflow-auto p-4">{renderViewerBody(viewer)}</div>
         </div>
       )}
+
+      <AskAI
+        open={askOpen}
+        onClose={() => setAskOpen(false)}
+        context={{
+          courseTitle: course.title,
+          courseCode: course.code,
+          moduleTitle: activeModule?.title,
+          lessonTitle: activeLesson.lessonTitle,
+          shortDescription: course.shortDescription,
+          outcomes: course.outcomes,
+        }}
+      />
     </div>
   );
 }

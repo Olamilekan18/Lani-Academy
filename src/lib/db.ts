@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
-import { courses as defaultCourses } from "../data/catalog";
+import { courses as defaultCourses, initialSmes } from "../data/catalog";
 import type {
   Course,
   Enrollment,
@@ -23,6 +23,7 @@ import type {
   AttendanceRecord,
   DiscussionPost,
   Pathway,
+  Sme,
   AnalyticsEvent,
   CourseReview,
   LessonNote,
@@ -133,6 +134,13 @@ export async function seedDatabase(): Promise<boolean> {
       await supabase.from("calendar_events").insert(toSnakeCaseKeys(mockCalendarEvents));
       await supabase.from("notifications").insert(toSnakeCaseKeys(mockNotifications));
       await supabase.from("facilitator_assignments").insert(toSnakeCaseKeys(mockFacilitatorAssignments));
+    }
+
+    // Seed default Subject Matter Experts if none exist yet.
+    const { data: exSmes, error: smeErr } = await supabase.from("smes").select("id").limit(1);
+    if (!smeErr && (!exSmes || exSmes.length === 0)) {
+      console.log("Seeding default Subject Matter Experts...");
+      await supabase.from("smes").insert(toSnakeCaseKeys(initialSmes));
     }
 
     return true;
@@ -506,8 +514,40 @@ export async function dbSendTemplateEmail(
 }
 
 // Upload a file to the public "media" storage bucket and return its public URL.
+// Maximum allowed upload size across the whole app.
+export const MAX_UPLOAD_MB = 5;
+export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
+/**
+ * Client-side upload validation. Returns a human-readable error string if the
+ * file is invalid (too large / dangerous type), or null if it's acceptable.
+ * Use this in the UI to give friendly feedback before calling dbUploadFile.
+ */
+export function validateUpload(file: File, allowedTypes?: string[]): string | null {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    return `File is too large (${mb}MB). Maximum upload size is ${MAX_UPLOAD_MB}MB.`;
+  }
+  const ext = (file.name.includes(".") ? file.name.split(".").pop() || "" : "").toLowerCase();
+  const dangerousExts = ["html", "htm", "svg", "js", "mjs", "php", "sh", "exe", "cmd", "bat", "vbs", "jar", "py"];
+  if (dangerousExts.includes(ext)) return "This file type is not allowed.";
+  if (allowedTypes && allowedTypes.length > 0) {
+    const isAllowed = allowedTypes.some((type) =>
+      type.endsWith("/*") ? file.type.startsWith(type.slice(0, -1)) : file.type === type
+    );
+    if (!isAllowed) return "This file type is not accepted for this field.";
+  }
+  return null;
+}
+
 export async function dbUploadFile(file: File, folder = "assets", allowedTypes?: string[]): Promise<string | null> {
   if (!supabase) return null;
+
+  // Enforce the global 5MB upload ceiling.
+  if (file.size > MAX_UPLOAD_BYTES) {
+    console.error(`Upload blocked: file exceeds ${MAX_UPLOAD_MB}MB limit`, file.size);
+    return null;
+  }
 
   // Block dangerous executable/script extensions
   const ext = (file.name.includes(".") ? file.name.split(".").pop() || "" : "").toLowerCase();
@@ -822,6 +862,27 @@ export async function dbDeletePathway(id: string): Promise<boolean> {
   if (!supabase) return false;
   const { error } = await supabase.from("pathways").delete().eq("id", id);
   if (error) console.error("Error deleting pathway:", error.message);
+  return !error;
+}
+
+// Subject Matter Experts
+export async function dbGetSmes(): Promise<Sme[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from("smes").select("*").order("created_at", { ascending: true });
+  return toCamelCaseKeys(data || []) as Sme[];
+}
+
+export async function dbSaveSme(sme: Partial<Sme>): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("smes").upsert(toSnakeCaseKeys(sme));
+  if (error) console.error("Error saving SME:", error.message);
+  return !error;
+}
+
+export async function dbDeleteSme(id: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from("smes").delete().eq("id", id);
+  if (error) console.error("Error deleting SME:", error.message);
   return !error;
 }
 

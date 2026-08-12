@@ -102,10 +102,10 @@ export default function Courses({
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="mb-8 rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-4">
+      <div className="mb-8 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-6">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
           {/* Search Bar */}
-          <div className="relative md:col-span-2">
+          <div className="relative sm:col-span-2">
             <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
             <input
               type="text"
@@ -149,19 +149,19 @@ export default function Courses({
         </div>
 
         {/* Level and Reset Row */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200/50 pt-4">
-          <div className="flex items-center gap-4">
+        <div className="mt-4 flex flex-col gap-4 border-t border-slate-200/50 pt-4 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <label className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
               <Filter size={14} className="text-slate-400" />
               Skill Level:
             </label>
-            <div className="inline-flex rounded-lg bg-white p-0.5 border border-slate-200 shadow-sm">
+            <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
               {skillLevels.map((lvl) => (
                 <button
                   key={lvl}
                   type="button"
                   onClick={() => setSelectedLevel(lvl)}
-                  className={`rounded-md px-3 py-1 text-xs font-bold transition-all ${
+                  className={`flex-1 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-bold transition-all sm:flex-none ${
                     selectedLevel === lvl
                       ? "bg-lani-green text-white"
                       : "text-slate-500 hover:text-slate-700"
@@ -173,7 +173,7 @@ export default function Courses({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-start">
             <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
               Sort:
               <select

@@ -344,6 +344,18 @@ export type Pathway = {
   createdAt: string;
 };
 
+// Subject Matter Expert — profile shown on the landing page and managed in admin.
+export type Sme = {
+  id: string;
+  name: string;
+  title: string;       // role / expertise headline, e.g. "Digital Transformation Lead"
+  expertise: string;   // thematic area / short tag
+  bio: string;
+  image: string;       // photo URL
+  published: boolean;
+  createdAt?: string;
+};
+
 export type DiscussionPost = {
   id: string;
   courseId: string;

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "check:schema": "node scripts/check-schema-sync.mjs",
+    "seed:materials": "node scripts/seed-course-materials.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

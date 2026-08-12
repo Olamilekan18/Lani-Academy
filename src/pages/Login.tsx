@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
-import { dbSendTemplateEmail } from "../lib/db";
-import { LogIn, UserPlus, Key, Mail, ShieldAlert, Loader2, Sparkles, BookOpen, Shield } from "lucide-react";
+import { dbSendTemplateEmail, dbUploadFile, validateUpload, MAX_UPLOAD_MB } from "../lib/db";
+import { LogIn, UserPlus, Key, Mail, ShieldAlert, Loader2, Sparkles, BookOpen, Shield, Video, FileText } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 interface LoginProps {
@@ -32,6 +32,8 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
   const [qualifications, setQualifications] = useState("");
+  const [introVideo, setIntroVideo] = useState<File | null>(null);
+  const [cvFile, setCvFile] = useState<File | null>(null);
   const [orgName, setOrgName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [phone, setPhone] = useState("");
@@ -78,6 +80,20 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
           if (portalRole === "facilitator") {
             updatePayload.bio = bio;
             updatePayload.qualifications = qualifications;
+            // Optional 1-min intro video + CV/resume. Upload failures are
+            // non-blocking — the account is still created.
+            if (introVideo) {
+              const url = await dbUploadFile(introVideo, "facilitator-videos", ["video/*"]);
+              if (url) updatePayload.intro_video_url = url;
+            }
+            if (cvFile) {
+              const url = await dbUploadFile(cvFile, "facilitator-cvs", [
+                "application/pdf",
+                "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              ]);
+              if (url) updatePayload.cv_url = url;
+            }
           } else if (portalRole === "organization") {
             updatePayload.organisation = orgName;
             updatePayload.job_title = jobTitle;
@@ -184,6 +200,60 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
                       placeholder="A short biography outlining your expertise..."
                       className="min-h-[80px]"
                     />
+                  </label>
+
+                  {/* Optional 1-minute intro video */}
+                  <label className="form-field">
+                    <span className="flex items-center gap-1.5">
+                      <Video size={13} className="text-lani-gold" />
+                      Intro video <span className="text-slate-400 font-normal">(optional, ~1 min)</span>
+                    </span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null;
+                        if (f) {
+                          const err = validateUpload(f, ["video/*"]);
+                          if (err) { setError(err); e.target.value = ""; setIntroVideo(null); return; }
+                          setError("");
+                        }
+                        setIntroVideo(f);
+                      }}
+                      className="mt-1.5 block w-full text-[11px] file:mr-2 file:rounded-md file:border-0 file:bg-lani-mist file:px-2 file:py-1 file:text-[11px] file:font-bold file:text-lani-green"
+                    />
+                    <span className="mt-1 text-[10px] text-slate-400">
+                      A short clip of you facilitating a course. Max {MAX_UPLOAD_MB}MB.
+                    </span>
+                  </label>
+
+                  {/* Optional CV / resume */}
+                  <label className="form-field">
+                    <span className="flex items-center gap-1.5">
+                      <FileText size={13} className="text-lani-gold" />
+                      CV / Résumé <span className="text-slate-400 font-normal">(optional)</span>
+                    </span>
+                    <input
+                      type="file"
+                      accept="application/pdf,.doc,.docx"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null;
+                        if (f) {
+                          const err = validateUpload(f, [
+                            "application/pdf",
+                            "application/msword",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                          ]);
+                          if (err) { setError(err); e.target.value = ""; setCvFile(null); return; }
+                          setError("");
+                        }
+                        setCvFile(f);
+                      }}
+                      className="mt-1.5 block w-full text-[11px] file:mr-2 file:rounded-md file:border-0 file:bg-lani-mist file:px-2 file:py-1 file:text-[11px] file:font-bold file:text-lani-green"
+                    />
+                    <span className="mt-1 text-[10px] text-slate-400">
+                      PDF or Word document. Max {MAX_UPLOAD_MB}MB.
+                    </span>
                   </label>
                 </>
               )}

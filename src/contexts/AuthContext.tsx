@@ -15,6 +15,8 @@ interface Profile {
   avatar_url: string | null;
   bio?: string;
   qualifications?: string;
+  intro_video_url?: string;
+  cv_url?: string;
   country?: string;
   state_region?: string;
   city?: string;
