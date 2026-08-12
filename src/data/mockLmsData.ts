@@ -391,6 +391,7 @@ export const mockQuizzes: Quiz[] = [
     passingScore: 60,
     timeLimitMinutes: 15,
     dueDate: "2026-07-01",
+    dueTime: "23:59",
   },
   {
     id: "quiz-002",
@@ -431,6 +432,7 @@ export const mockQuizzes: Quiz[] = [
     passingScore: 70,
     timeLimitMinutes: 10,
     dueDate: "2026-07-10",
+    dueTime: "17:00",
   },
   {
     id: "quiz-003",
@@ -477,6 +479,7 @@ export const mockQuizzes: Quiz[] = [
     passingScore: 75,
     timeLimitMinutes: 20,
     dueDate: "2026-05-30",
+    dueTime: "23:59",
   },
 ];
 
@@ -506,6 +509,7 @@ export const mockAssignments: Assignment[] = [
     description:
       "Analyze the provided case study of a Nigerian bank's digital transformation journey. Identify key success factors, challenges, and propose a 12-month roadmap for a similar institution.",
     dueDate: "2026-07-15",
+    dueTime: "23:59",
     maxScore: 100,
   },
   {
@@ -516,6 +520,7 @@ export const mockAssignments: Assignment[] = [
     description:
       "Prepare a draft ESG impact report for a hypothetical mining company operating in West Africa. Include environmental metrics, social impact indicators, and governance structure.",
     dueDate: "2026-07-20",
+    dueTime: "23:59",
     maxScore: 100,
   },
 ];

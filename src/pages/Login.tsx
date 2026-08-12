@@ -9,13 +9,18 @@ interface LoginProps {
   portalRole: "learner" | "facilitator" | "admin" | "organization";
   onSuccess: () => void;
   onNavigate: (view: any) => void;
+  /** Start the form in signup mode regardless of the URL query. */
+  forceSignup?: boolean;
+  /** Render just the card, without the full-page section wrapper. */
+  embedded?: boolean;
 }
 
-export default function Login({ portalRole, onSuccess, onNavigate }: LoginProps) {
+export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, embedded }: LoginProps) {
   const { signIn, signUp, resetPassword, updateProfile } = useAuth();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const initialMode = queryParams.get("mode") === "signup" ? "signup" : "signin";
+  const initialMode =
+    forceSignup || queryParams.get("mode") === "signup" ? "signup" : "signin";
 
   // Admin accounts are provisioned by a super admin — never self-serve.
   const allowSelfSignup = portalRole !== "admin";
@@ -109,10 +114,9 @@ export default function Login({ portalRole, onSuccess, onNavigate }: LoginProps)
 
 
 
-  return (
-    <div className="section min-h-[45rem] flex items-center justify-center bg-slate-50">
+  const card = (
       <div className="w-full max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-8 text-left">
-        
+
         {/* Brand Header */}
         <div className="text-center mb-8 space-y-2">
           <div className={`mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br text-white shadow ${
@@ -362,6 +366,13 @@ export default function Login({ portalRole, onSuccess, onNavigate }: LoginProps)
         </div>
 
       </div>
+  );
+
+  if (embedded) return card;
+
+  return (
+    <div className="section min-h-[45rem] flex items-center justify-center bg-slate-50">
+      {card}
     </div>
   );
 }

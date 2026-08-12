@@ -758,8 +758,17 @@ export async function dbGetAssignmentSubmissions(): Promise<AssignmentSubmission
 
 export async function dbSaveAssignmentSubmission(submission: AssignmentSubmission): Promise<boolean> {
   if (!supabase) return false;
-  const { error } = await supabase.from("assignment_submissions").upsert(toSnakeCaseKeys(submission));
+  // Learners use this to insert new submissions.
+  const { error } = await supabase.from("assignment_submissions").insert(toSnakeCaseKeys(submission));
   if (error) console.error("Error saving assignment submission:", error.message);
+  return !error;
+}
+
+export async function dbUpdateAssignmentSubmission(id: string, updates: Partial<AssignmentSubmission>): Promise<boolean> {
+  if (!supabase) return false;
+  // Facilitators use this to grade/update existing submissions (avoids INSERT RLS checks)
+  const { error } = await supabase.from("assignment_submissions").update(toSnakeCaseKeys(updates)).eq("id", id);
+  if (error) console.error("Error updating assignment submission:", error.message);
   return !error;
 }
 

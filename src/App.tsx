@@ -15,6 +15,7 @@ import FacilitatorDashboard from "./pages/FacilitatorDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import Verify from "./pages/Verify";
 import SignUp from "./pages/SignUp";
+import SignUpRole from "./pages/SignUpRole";
 import About from "./pages/About";
 import Certification from "./pages/Certification";
 import Resources from "./pages/Resources";
@@ -66,6 +67,7 @@ import {
   dbGetFacilitators,
   dbSaveAnnouncement,
   dbSaveAssignmentSubmission,
+  dbUpdateAssignmentSubmission,
   dbSaveQuizAttempt,
   dbSaveQuiz,
   dbSaveAssignment,
@@ -111,7 +113,9 @@ import {
   certificateReadyEmail,
   applicationStatusEmail,
   broadcastEmail,
-  notificationEmail
+  notificationEmail,
+  assignmentDeadlineEmail,
+  quizDeadlineEmail
 } from "./lib/emailTemplates";
 import type {
   View,
@@ -336,6 +340,90 @@ export default function App() {
     if (email) dbGetWishlist(email).then(setWishlist).catch(() => {});
     else setWishlist([]);
   }, [user, profile]);
+
+  // Deadline reminder loop for enrolled assignments
+  useEffect(() => {
+    if (!user || profile?.role !== "learner") return;
+    const learnerEmail = profile?.email || user.email;
+    const learnerName = profile?.full_name || "Learner";
+    if (!learnerEmail) return;
+
+    const checkDeadlineReminders = () => {
+      const now = new Date().getTime();
+      const oneHourMs = 60 * 60 * 1000;
+
+      courseAssignments.forEach(async (a) => {
+        // Enrolled?
+        if (!enrollments.some(e => e.courseId === a.courseId)) return;
+        // Already submitted?
+        if (submissions.some(s => s.assignmentId === a.id && s.learnerEmail === learnerEmail)) return;
+        // Has deadline?
+        if (!a.dueDate) return;
+
+        const deadlineStr = `${a.dueDate}T${a.dueTime || "23:59"}`;
+        const deadlineTime = new Date(deadlineStr).getTime();
+        const timeUntilDue = deadlineTime - now;
+
+        // Is it due within the next hour, and hasn't passed yet?
+        if (timeUntilDue > 0 && timeUntilDue <= oneHourMs) {
+          const reminderKey = `reminder_${a.id}_${learnerEmail}`;
+          if (localStorage.getItem(reminderKey)) return; // Already reminded
+
+          localStorage.setItem(reminderKey, "true");
+
+          // Save in-app notification
+          await dbSaveNotification({
+            id: "notif-" + Date.now().toString(36),
+            type: "reminder",
+            title: "Assignment Due Soon",
+            body: `Your assignment "${a.title}" for ${a.courseTitle} is due in less than an hour!`,
+            read: false,
+            createdAt: new Date().toISOString(),
+            learnerEmail
+          });
+
+          // Send email
+          const { subject, html } = assignmentDeadlineEmail(learnerName, a.title, a.courseTitle, deadlineStr);
+          await dbSendEmail(learnerEmail, subject, html);
+        }
+      });
+
+      // Loop for quizzes
+      quizzes.forEach(async (q) => {
+        if (!enrollments.some(e => e.courseId === q.courseId)) return;
+        if (quizAttempts.some(a => a.quizId === q.id && a.learnerEmail === learnerEmail)) return;
+        if (!q.dueDate) return;
+
+        const deadlineStr = `${q.dueDate}T${q.dueTime || "23:59"}`;
+        const deadlineTime = new Date(deadlineStr).getTime();
+        const timeUntilDue = deadlineTime - now;
+
+        if (timeUntilDue > 0 && timeUntilDue <= oneHourMs) {
+          const reminderKey = `reminder_quiz_${q.id}_${learnerEmail}`;
+          if (localStorage.getItem(reminderKey)) return;
+
+          localStorage.setItem(reminderKey, "true");
+
+          await dbSaveNotification({
+            id: "notif-" + Date.now().toString(36),
+            type: "reminder",
+            title: "Quiz Closing Soon",
+            body: `Your quiz "${q.title}" for ${q.courseTitle} is closing in less than an hour!`,
+            read: false,
+            createdAt: new Date().toISOString(),
+            learnerEmail
+          });
+
+          const { subject, html } = quizDeadlineEmail(learnerName, q.title, q.courseTitle, deadlineStr);
+          await dbSendEmail(learnerEmail, subject, html);
+        }
+      });
+    };
+
+    checkDeadlineReminders();
+    const intervalId = setInterval(checkDeadlineReminders, 5 * 60 * 1000); // Check every 5 mins
+    return () => clearInterval(intervalId);
+  }, [user, profile, courseAssignments, enrollments, submissions]);
 
   // Helper for components still using onNavigate
   const navigateToView = (view: View) => {
@@ -576,13 +664,31 @@ export default function App() {
   const handleGradeSubmission = async (subId: string, score: number, feedback: string) => {
     const sub = submissions.find(s => s.id === subId);
     if (sub) {
-      await dbSaveAssignmentSubmission({ ...sub, score, feedback, status: "Graded" });
-      notifyOne(sub.learnerEmail, "assessment", "Assignment graded", `Your submission scored ${score}.${feedback ? `\n\nFeedback: ${feedback}` : ""}`, true);
-      await loadDatabase();
+      if (sub.status === "Graded") {
+        toast.error("This assignment has already been graded.");
+        return;
+      }
+      const ok = await dbUpdateAssignmentSubmission(sub.id, { score, feedback, status: "Graded" });
+      if (ok) {
+        toast.success("Assignment graded successfully");
+        const asgn = courseAssignments.find(a => a.id === sub.assignmentId);
+        const maxScoreStr = asgn ? `/${asgn.maxScore}` : "";
+        notifyOne(sub.learnerEmail, "assessment", "Assignment graded", `Your submission scored ${score}${maxScoreStr}.${feedback ? `\n\nFeedback: ${feedback}` : ""}`, true);
+        await loadDatabase();
+      } else {
+        toast.error("Failed to save grade.");
+      }
     }
   };
 
   const handleTakeQuiz = async (q: Quiz, answers: number[], score: number, passed: boolean) => {
+    if (q.dueDate) {
+      const deadlineStr = `${q.dueDate}T${q.dueTime || "23:59"}`;
+      if (new Date() > new Date(deadlineStr)) {
+        toast.error("The deadline for this quiz has passed.");
+        return;
+      }
+    }
     const learnerEmail = profile?.email || user?.email || "learner@lani.academy";
     const learnerName = profile?.full_name || "Learner";
     const attempt: QuizAttempt = {
@@ -816,6 +922,15 @@ export default function App() {
     content: string,
     fileUrl?: string
   ) => {
+    // Server-side deadline guard
+    const asgn = courseAssignments.find(a => a.id === assignmentId);
+    if (asgn?.dueDate) {
+      const deadline = new Date(`${asgn.dueDate}T${asgn.dueTime || "23:59"}`);
+      if (new Date() > deadline) {
+        toast.error("The submission deadline has passed for this assignment.");
+        return;
+      }
+    }
     const learnerEmail = profile?.email || user?.email || "";
     const learnerName = profile?.full_name || "Learner";
     const submission: AssignmentSubmission = {
@@ -1037,6 +1152,10 @@ export default function App() {
         <Route path="/applications" element={<Applications />} />
 
         <Route path="/signup" element={<SignUp />} />
+        <Route path="/signup/learner" element={<SignUpRole role="learner" />} />
+        <Route path="/signup/facilitator" element={<SignUpRole role="facilitator" />} />
+        <Route path="/signup/organization" element={<SignUpRole role="organization" />} />
+        <Route path="/signup/admin" element={<SignUpRole role="admin" />} />
 
         <Route path="/about" element={<About onNavigate={navigateToView} />} />
         <Route path="/certification" element={<Certification onNavigate={navigateToView} />} />

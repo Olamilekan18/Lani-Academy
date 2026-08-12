@@ -201,6 +201,7 @@ export type Quiz = {
   passingScore: number; // percentage
   timeLimitMinutes: number;
   dueDate: string;
+  dueTime?: string;
 };
 
 export type QuizAttempt = {
@@ -221,6 +222,7 @@ export type Assignment = {
   title: string;
   description: string;
   dueDate: string;
+  dueTime?: string;
   maxScore: number;
 };
 

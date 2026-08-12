@@ -159,6 +159,24 @@ export function enrolmentAccessEmail(name: string, courseTitle: string): EmailCo
 }
 
 // ── Certification ────────────────────────────────────────────
+export function assignmentDeadlineEmail(name: string, assignmentTitle: string, courseTitle: string, deadlineStr: string): EmailContent {
+  const body = `<p>Hi ${name},</p>
+    <p>This is a reminder that your assignment <strong>${assignmentTitle}</strong> for <em>${courseTitle}</em> is due soon.</p>
+    <p><strong>Deadline:</strong> ${deadlineStr}</p>
+    <p>Please log in to your dashboard to submit your work before the deadline. Submissions will not be accepted after this time.</p>
+    ${badge("Action Required")}`;
+  return { subject: `Action Required: Assignment Due Soon — ${assignmentTitle}`, html: shell("Assignment Deadline Reminder", body) };
+}
+
+export function quizDeadlineEmail(name: string, quizTitle: string, courseTitle: string, deadlineStr: string): EmailContent {
+  const body = `<p>Hi ${name},</p>
+    <p>This is a reminder that your quiz <strong>${quizTitle}</strong> for <em>${courseTitle}</em> is closing soon.</p>
+    <p><strong>Deadline:</strong> ${deadlineStr}</p>
+    <p>Please log in to your dashboard to take the quiz before it closes. You will not be able to attempt it after this time.</p>
+    ${badge("Action Required")}`;
+  return { subject: `Action Required: Quiz Closing Soon — ${quizTitle}`, html: shell("Quiz Deadline Reminder", body) };
+}
+
 export function certificateReadyEmail(name: string, courseTitle: string, certId: string): EmailContent {
   const body = `<p>Congratulations ${name}!</p>
     <p>You've completed <strong>${courseTitle}</strong> and your certificate has been issued. You can download it from your learner dashboard, and anyone can verify it using the ID below.</p>

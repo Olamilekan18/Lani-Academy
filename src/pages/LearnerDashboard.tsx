@@ -162,6 +162,14 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
   const memberSince = user?.created_at ? formatDate(user.created_at) : "—";
 
   const handleAssignmentSubmit = async (a: Assignment) => {
+    // Check deadline
+    if (a.dueDate) {
+      const deadlineStr = `${a.dueDate}T${a.dueTime || "23:59"}`;
+      if (new Date() > new Date(deadlineStr)) {
+        toast.error("The submission deadline has passed for this assignment.");
+        return;
+      }
+    }
     if (!subContent.trim()) { toast.error("Add your submission text."); return; }
     setSubBusy(true);
     let fileUrl: string | undefined;
@@ -475,17 +483,23 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
             <div className="grid gap-4">
               {myQuizzes.map(q => {
                 const attempt = quizAttempts.find(a => a.quizId === q.id);
+                const deadlineStr = q.dueDate ? `${q.dueDate}T${q.dueTime || "23:59"}` : null;
+                const isPastDeadline = deadlineStr ? new Date() > new Date(deadlineStr) : false;
                 return (
                   <div key={q.id} className="rounded-xl border border-slate-200 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-lani-blue">{q.courseTitle}</span>
                       <h4 className="text-sm font-bold text-lani-navy mt-1">{q.title}</h4>
-                      <p className="text-xs text-slate-500 mt-1">{q.questions.length} questions • {q.timeLimitMinutes} min • Pass: {q.passingScore}% • Due: {formatDate(q.dueDate)}</p>
+                      <p className="text-xs text-slate-500 mt-1">{q.questions.length} questions • {q.timeLimitMinutes} min • Pass: {q.passingScore}% • Due: {formatDate(q.dueDate)}{q.dueTime ? ` at ${q.dueTime}` : ""}</p>
                     </div>
                     {attempt ? (
                       <div className="text-right shrink-0">
                         <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${attempt.passed?"bg-lani-emerald/15 text-lani-green":"bg-red-50 text-red-600"}`}>{attempt.passed?"Passed":"Failed"} — {attempt.score}%</span>
                         <p className="text-[10px] text-slate-400 mt-1">Taken {formatDate(attempt.submittedAt)}</p>
+                      </div>
+                    ) : isPastDeadline ? (
+                      <div className="text-right shrink-0">
+                        <span className="inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold bg-red-50 text-red-600">Quiz Closed</span>
                       </div>
                     ) : (
                       <button onClick={() => setActiveQuiz(q)} className="btn-primary min-h-9 px-4 text-xs shrink-0"><ClipboardCheck size={14}/>Take Quiz</button>
@@ -502,21 +516,25 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
               {myAssignments.map(a => {
                 const sub = submissions.find(s => s.assignmentId === a.id && s.learnerEmail === myEmail);
                 const isSubmitting = submitFor === a.id;
+                const deadlineStr = a.dueDate ? `${a.dueDate}T${a.dueTime || "23:59"}` : null;
+                const isPastDeadline = deadlineStr ? new Date() > new Date(deadlineStr) : false;
                 return (
                   <div key={a.id} className="rounded-xl border border-slate-200 p-5">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-lani-blue">{a.courseTitle}</span>
                     <h4 className="text-sm font-bold text-lani-navy mt-1">{a.title}</h4>
                     <p className="text-xs text-slate-500 mt-1 line-clamp-2">{a.description}</p>
-                    <div className="mt-3 flex items-center gap-3">
-                      <span className="text-[10px] text-slate-400">Due: {formatDate(a.dueDate)} • Max Score: {a.maxScore}</span>
+                    <div className="mt-3 flex items-center gap-3 flex-wrap">
+                      <span className="text-[10px] text-slate-400">Due: {formatDate(a.dueDate)}{a.dueTime ? ` at ${a.dueTime}` : ""} • Max Score: {a.maxScore}</span>
                       {sub ? (
                         <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${sub.status==="Graded"?"bg-lani-emerald/15 text-lani-green":"bg-amber-100 text-amber-700"}`}>
                           {sub.status==="Graded"?`Graded: ${sub.score}/${a.maxScore}`:sub.status}
                         </span>
+                      ) : isPastDeadline ? (
+                        <span className="inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold bg-red-50 text-red-600">Submission Closed</span>
                       ) : (
                         <span className="inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-500">Not Submitted</span>
                       )}
-                      {!sub && !isSubmitting && (
+                      {!sub && !isSubmitting && !isPastDeadline && (
                         <button onClick={() => { setSubmitFor(a.id); setSubContent(""); setSubFile(null); }} className="ml-auto btn-primary min-h-8 px-3 text-[11px]"><Upload size={12}/>Submit</button>
                       )}
                     </div>
@@ -536,9 +554,28 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
                       </div>
                     )}
 
-                    {sub && (
-                      <div className="mt-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600 whitespace-pre-wrap"><strong className="text-lani-navy">Your submission:</strong> {sub.content}</div>
-                    )}
+                    {sub && (() => {
+                      const parts = sub.content.split(/\n\nAttached file: /);
+                      const mainText = parts[0];
+                      const attachedUrl = parts[1];
+                      return (
+                        <div className="mt-2">
+                          {mainText && (
+                            <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 whitespace-pre-wrap">
+                              <strong className="text-lani-navy">Your submission:</strong>{" "}{mainText}
+                            </div>
+                          )}
+                          {attachedUrl && (
+                            <div className="mt-2">
+                              <a href={attachedUrl.trim()} target="_blank" rel="noopener noreferrer" className="btn-secondary h-8 px-3 text-[11px] inline-flex items-center">
+                                <ExternalLink size={12} className="mr-1.5" />
+                                View Attached File
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {sub?.feedback && <div className="mt-2 rounded-lg bg-lani-mist/50 p-3 text-xs text-slate-600"><strong className="text-lani-navy">Feedback:</strong> {sub.feedback}</div>}
                   </div>
                 );

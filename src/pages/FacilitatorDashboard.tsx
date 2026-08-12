@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star, Calendar, MessageSquare, Bell } from "lucide-react";
+import { GraduationCap, BookOpen, Users, ClipboardCheck, Megaphone, TrendingUp, Clock, CheckCircle, Send, ChevronRight, PlayCircle, FileText, BarChart2, ListChecks, Plus, Trash2, X, Star, Calendar, MessageSquare, Bell, ExternalLink } from "lucide-react";
 import type { Course, CourseModule, Enrollment, FacilitatorAssignment, AssignmentSubmission, Assignment, Announcement, CalendarEvent, Quiz, QuizAttempt, Survey, SurveyResponse, AttendanceRecord, DiscussionPost } from "../lib/types";
 import { formatDate } from "../lib/utils";
 import toast from "react-hot-toast";
@@ -76,6 +76,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
   const [qPass, setQPass] = useState("70");
   const [qTime, setQTime] = useState("15");
   const [qDue, setQDue] = useState("");
+  const [qDueTime, setQDueTime] = useState("23:59");
   const [qQuestions, setQQuestions] = useState<DraftQuestion[]>([{ question: "", options: ["", "", "", ""], correctIndex: 0 }]);
   const [savingQuiz, setSavingQuiz] = useState(false);
 
@@ -101,7 +102,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
   }));
 
   const resetQuizForm = () => {
-    setQCourse(""); setQTitle(""); setQDesc(""); setQPass("70"); setQTime("15"); setQDue("");
+    setQCourse(""); setQTitle(""); setQDesc(""); setQPass("70"); setQTime("15"); setQDue(""); setQDueTime("23:59");
     setQQuestions([{ question: "", options: ["", "", "", ""], correctIndex: 0 }]);
   };
 
@@ -110,6 +111,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
   const [aTitle, setATitle] = useState("");
   const [aDesc, setADesc] = useState("");
   const [aDue, setADue] = useState("");
+  const [aTime, setATime] = useState("23:59");
   const [aMax, setAMax] = useState("100");
   const [savingA, setSavingA] = useState(false);
   const myAssignments = courseAssignments.filter(a => quizCourses.some(c => c.id === a.courseId));
@@ -126,12 +128,13 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
       title: aTitle.trim(),
       description: aDesc.trim(),
       dueDate: aDue,
+      dueTime: aTime || "23:59",
       maxScore: parseInt(aMax) || 100,
     };
     setSavingA(true);
     await onSaveAssignment(assignment);
     setSavingA(false);
-    setACourse(""); setATitle(""); setADesc(""); setADue(""); setAMax("100");
+    setACourse(""); setATitle(""); setADesc(""); setADue(""); setATime("23:59"); setAMax("100");
   };
 
   // Survey builder state
@@ -199,6 +202,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
       passingScore: parseInt(qPass) || 0,
       timeLimitMinutes: parseInt(qTime) || 0,
       dueDate: qDue,
+      dueTime: qDueTime || "23:59",
     };
     setSavingQuiz(true);
     await onSaveQuiz(quiz);
@@ -424,7 +428,29 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
                   </div>
                   <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold shrink-0 ${s.status==="Graded"?"bg-lani-emerald/15 text-lani-green":s.status==="Submitted"?"bg-amber-100 text-amber-700":"bg-slate-100 text-slate-500"}`}>{s.status}{s.score !== null ? ` — ${s.score}/${asgn?.maxScore}` : ""}</span>
                 </div>
-                <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600"><FileText size={12} className="inline mr-1"/>{s.content}</div>
+                {(() => {
+                  const parts = s.content.split(/\n\nAttached file: /);
+                  const mainText = parts[0];
+                  const attachedUrl = parts[1];
+                  return (
+                    <div className="mt-3">
+                      {mainText && (
+                        <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 whitespace-pre-wrap">
+                          <FileText size={12} className="inline mr-1"/>
+                          {mainText}
+                        </div>
+                      )}
+                      {attachedUrl && (
+                        <div className="mt-3">
+                          <a href={attachedUrl.trim()} target="_blank" rel="noopener noreferrer" className="btn-secondary h-8 px-3 text-[11px] inline-flex items-center">
+                            <ExternalLink size={12} className="mr-1.5" />
+                            View Attached Assignment
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {s.status === "Submitted" && !isGrading && (
                   <button onClick={() => setGradingId(s.id)} className="mt-3 btn-primary min-h-9 px-4 text-xs"><ClipboardCheck size={13}/>Grade Now</button>
                 )}
@@ -470,7 +496,10 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
               <label className="form-field sm:col-span-2">Description<input value={qDesc} onChange={e => setQDesc(e.target.value)} placeholder="Short description (optional)"/></label>
               <label className="form-field">Passing score (%)<input type="number" value={qPass} onChange={e => setQPass(e.target.value)} min={0} max={100}/></label>
               <label className="form-field">Time limit (min)<input type="number" value={qTime} onChange={e => setQTime(e.target.value)} min={0} placeholder="0 = no limit"/></label>
-              <label className="form-field sm:col-span-2">Due date<input type="date" value={qDue} onChange={e => setQDue(e.target.value)}/></label>
+              <div className="sm:col-span-2 grid grid-cols-2 gap-4">
+                <label className="form-field">Due date<input type="date" value={qDue} onChange={e => setQDue(e.target.value)}/></label>
+                <label className="form-field">Time<input type="time" value={qDueTime} onChange={e => setQDueTime(e.target.value)}/></label>
+              </div>
             </div>
 
             {/* Questions */}
@@ -523,7 +552,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
                   <div className="mt-2 flex items-center gap-3 text-[11px] font-semibold text-slate-500">
                     <span>{attempts.length} attempts</span>
                     <span className="text-lani-green">{passed} passed</span>
-                    {q.dueDate && <span>Due {formatDate(q.dueDate)}</span>}
+                    {q.dueDate && <span>Due {formatDate(q.dueDate)}{q.dueTime ? ` at ${q.dueTime}` : ""}</span>}
                   </div>
                 </div>
               );
@@ -550,8 +579,9 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
             </label>
             <label className="form-field">Title<input value={aTitle} onChange={e => setATitle(e.target.value)} required placeholder="e.g. Capstone project brief"/></label>
             <label className="form-field">Instructions / description<textarea value={aDesc} onChange={e => setADesc(e.target.value)} rows={4} placeholder="What should learners submit?"/></label>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <label className="form-field">Due date<input type="date" value={aDue} onChange={e => setADue(e.target.value)}/></label>
+              <label className="form-field">Due time<input type="time" value={aTime} onChange={e => setATime(e.target.value)}/></label>
               <label className="form-field">Max score<input type="number" value={aMax} onChange={e => setAMax(e.target.value)} min={1}/></label>
             </div>
             <div className="flex justify-end border-t border-slate-100 pt-4">
@@ -571,7 +601,7 @@ export default function FacilitatorDashboard({ courses, enrollments, assignments
                   <div className="mt-2 flex items-center gap-3 text-[11px] font-semibold text-slate-500">
                     <span>{subs.length} submissions</span>
                     <span className="text-lani-green">{graded} graded</span>
-                    {a.dueDate && <span>Due {formatDate(a.dueDate)}</span>}
+                    {a.dueDate && <span>Due {formatDate(a.dueDate)}{a.dueTime ? ` at ${a.dueTime}` : ""}</span>}
                     <span>Max {a.maxScore}</span>
                   </div>
                 </div>

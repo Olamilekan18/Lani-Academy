@@ -24,7 +24,7 @@ export default function SignUp() {
         <div className="space-y-4">
           {/* Learner Option */}
           <button
-            onClick={() => navigate("/learn?mode=signup")}
+            onClick={() => navigate("/signup/learner")}
             className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 bg-white hover:border-lani-green hover:shadow-md transition-all group"
           >
             <div className="flex items-center gap-4">
@@ -64,7 +64,7 @@ export default function SignUp() {
             {adminExpanded && (
               <div className="p-4 pt-0 bg-slate-50 border-t border-slate-100 flex flex-col gap-2">
                 <button
-                  onClick={() => navigate("/facilitator?mode=signup")}
+                  onClick={() => navigate("/signup/facilitator")}
                   className="w-full flex items-center justify-between p-3 rounded-lg border border-transparent hover:border-lani-gold/30 hover:bg-white transition-all group mt-2"
                 >
                   <div className="flex items-center gap-3">
@@ -80,7 +80,7 @@ export default function SignUp() {
                 </button>
 
                 <button
-                  onClick={() => navigate("/admin?mode=signup")}
+                  onClick={() => navigate("/signup/admin")}
                   className="w-full flex items-center justify-between p-3 rounded-lg border border-transparent hover:border-lani-blue/30 hover:bg-white transition-all group"
                 >
                   <div className="flex items-center gap-3">
@@ -100,7 +100,7 @@ export default function SignUp() {
 
           {/* Organization Option */}
           <button
-            onClick={() => navigate("/organization?mode=signup")}
+            onClick={() => navigate("/signup/organization")}
             className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 bg-white hover:border-lani-green hover:shadow-md transition-all group"
           >
             <div className="flex items-center gap-4">
