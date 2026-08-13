@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { ArrowLeft, Plus, Trash2, Save, Loader2, X, GripVertical } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Loader2, X, GripVertical, Video } from "lucide-react";
 import type { Course, CourseModule, CourseStatus, DeliveryMode, FacilitatorAssignment } from "../lib/types";
-import { dbUploadFile } from "../lib/db";
+import { dbUploadFile, validateUpload, MAX_VIDEO_BYTES, MAX_VIDEO_MB } from "../lib/db";
 import toast from "react-hot-toast";
 
 interface CourseEditorProps {
@@ -14,10 +14,19 @@ interface CourseEditorProps {
 }
 
 type Mat = { name: string; url: string };
-type DraftLesson = { title: string; materials: Mat[]; newFiles: File[] };
-type DraftMod = { title: string; lessons: DraftLesson[]; materials: Mat[]; newFiles: File[]; draft: boolean; releaseAt: string };
+type DraftLesson = { title: string; materials: Mat[]; newFiles: File[]; videoUrl: string; videoFile: File | null };
+type DraftMod = { title: string; lessons: DraftLesson[]; materials: Mat[]; newFiles: File[]; draft: boolean; releaseAt: string; videoUrl: string; videoFile: File | null };
+const emptyLesson = (): DraftLesson => ({ title: "", materials: [], newFiles: [], videoUrl: "", videoFile: null });
+const emptyModule = (): DraftMod => ({ title: "", lessons: [emptyLesson()], materials: [], newFiles: [], draft: false, releaseAt: "", videoUrl: "", videoFile: null });
 const toDraftLessons = (m: CourseModule): DraftLesson[] =>
-  (m.lessons.length ? m.lessons : [""]).map((t) => ({ title: t, materials: m.lessonMaterials?.[t] || [], newFiles: [] }));
+  (m.lessons.length ? m.lessons : [""]).map((t) => ({ title: t, materials: m.lessonMaterials?.[t] || [], newFiles: [], videoUrl: m.lessonVideos?.[t] || "", videoFile: null }));
+const pickVideo = (file: File | null, apply: (f: File | null) => void) => {
+  if (file) {
+    const err = validateUpload(file, ["video/*"], MAX_VIDEO_BYTES);
+    if (err) { toast.error(err); return; }
+  }
+  apply(file);
+};
 
 const STATUSES: CourseStatus[] = ["Open", "Coming Soon", "Application Required", "Corporate Only", "Sold Out", "Archived"];
 const DELIVERY: DeliveryMode[] = ["Self-paced", "Instructor-led", "Virtual", "Physical", "Hybrid", "In-plant"];
@@ -48,14 +57,15 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
     shortDescription: initial?.shortDescription || "",
     fullDescription: initial?.fullDescription || "",
     featured: initial?.featured || false,
+    sequential: initial?.sequential || false,
   });
   const [deliveryModes, setDeliveryModes] = useState<DeliveryMode[]>(initial?.deliveryModes?.length ? initial.deliveryModes : ["Self-paced"]);
   const [outcomes, setOutcomes] = useState((initial?.outcomes || []).join("\n"));
   const [audience, setAudience] = useState((initial?.audience || []).join("\n"));
   const [modules, setModules] = useState<DraftMod[]>(
     initial?.modules?.length
-      ? initial.modules.map((m) => ({ title: m.title, lessons: toDraftLessons(m), materials: m.materials || [], newFiles: [], draft: m.draft || false, releaseAt: m.releaseAt || "" }))
-      : [{ title: "", lessons: [{ title: "", materials: [], newFiles: [] }], materials: [], newFiles: [], draft: false, releaseAt: "" }]
+      ? initial.modules.map((m) => ({ title: m.title, lessons: toDraftLessons(m), materials: m.materials || [], newFiles: [], draft: m.draft || false, releaseAt: m.releaseAt || "", videoUrl: m.videoUrl || "", videoFile: null }))
+      : [emptyModule()]
   );
   const [materialFiles, setMaterialFiles] = useState(initial?.materialFiles || []);
   const [newFiles, setNewFiles] = useState<File[]>([]);
@@ -66,15 +76,19 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
   const toggleMode = (m: DeliveryMode) => setDeliveryModes((p) => (p.includes(m) ? p.filter((x) => x !== m) : [...p, m]));
 
   // Module/lesson builder
-  const addModule = () => setModules((m) => [...m, { title: "", lessons: [{ title: "", materials: [], newFiles: [] }], materials: [], newFiles: [], draft: false, releaseAt: "" }]);
+  const addModule = () => setModules((m) => [...m, emptyModule()]);
   const setModRelease = (i: number, patch: Partial<Pick<DraftMod, "draft" | "releaseAt">>) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, ...patch } : mod)));
+  const setModuleVideoUrl = (i: number, v: string) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, videoUrl: v } : mod)));
+  const setModuleVideoFile = (i: number, file: File | null) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, videoFile: file } : mod)));
   const removeModule = (i: number) => setModules((m) => (m.length > 1 ? m.filter((_, idx) => idx !== i) : m));
   const setModuleTitle = (i: number, v: string) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, title: v } : mod)));
   const mapLesson = (i: number, li: number, fn: (l: DraftLesson) => DraftLesson) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, lessons: mod.lessons.map((l, j) => (j === li ? fn(l) : l)) } : mod)));
-  const addLesson = (i: number) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, lessons: [...mod.lessons, { title: "", materials: [], newFiles: [] }] } : mod)));
+  const addLesson = (i: number) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, lessons: [...mod.lessons, emptyLesson()] } : mod)));
   const setLesson = (i: number, li: number, v: string) => mapLesson(i, li, (l) => ({ ...l, title: v }));
   const removeLesson = (i: number, li: number) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, lessons: mod.lessons.length > 1 ? mod.lessons.filter((_, j) => j !== li) : mod.lessons } : mod)));
   const setLessonFiles = (i: number, li: number, files: File[]) => mapLesson(i, li, (l) => ({ ...l, newFiles: files }));
+  const setLessonVideoUrl = (i: number, li: number, v: string) => mapLesson(i, li, (l) => ({ ...l, videoUrl: v }));
+  const setLessonVideoFile = (i: number, li: number, file: File | null) => mapLesson(i, li, (l) => ({ ...l, videoFile: file }));
   const removeLessonMaterial = (i: number, li: number, mi: number) => mapLesson(i, li, (l) => ({ ...l, materials: l.materials.filter((_, j) => j !== mi) }));
   const setModuleFiles = (i: number, files: File[]) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, newFiles: files } : mod)));
   const removeModuleMaterial = (i: number, mi: number) => setModules((m) => m.map((mod, idx) => (idx === i ? { ...mod, materials: mod.materials.filter((_, j) => j !== mi) } : mod)));
@@ -102,8 +116,14 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
           const url = await dbUploadFile(file, "materials");
           if (url) materials.push({ name: file.name, url });
         }
+        let modVideo = m.videoUrl.trim();
+        if (m.videoFile) {
+          const url = await dbUploadFile(m.videoFile, "videos", ["video/*"], MAX_VIDEO_BYTES);
+          if (url) modVideo = url;
+        }
         const lessons: string[] = [];
         const lessonMaterials: Record<string, Mat[]> = {};
+        const lessonVideos: Record<string, string> = {};
         for (const l of m.lessons) {
           const lt = l.title.trim();
           if (!lt) continue;
@@ -114,9 +134,20 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
             if (url) lmats.push({ name: file.name, url });
           }
           if (lmats.length) lessonMaterials[lt] = lmats;
+          let lVideo = l.videoUrl.trim();
+          if (l.videoFile) {
+            const url = await dbUploadFile(l.videoFile, "videos", ["video/*"], MAX_VIDEO_BYTES);
+            if (url) lVideo = url;
+          }
+          if (lVideo) lessonVideos[lt] = lVideo;
         }
         const title = m.title.trim();
-        if (title || lessons.length || materials.length) cleanModules.push({ title, lessons, materials, lessonMaterials, draft: m.draft || undefined, releaseAt: m.releaseAt || undefined });
+        if (title || lessons.length || materials.length) cleanModules.push({
+          title, lessons, materials, lessonMaterials,
+          videoUrl: modVideo || undefined,
+          lessonVideos: Object.keys(lessonVideos).length ? lessonVideos : undefined,
+          draft: m.draft || undefined, releaseAt: m.releaseAt || undefined,
+        });
       }
 
       const chosenFacilitator = facilitators.find((x) => x.email === facilitatorEmail);
@@ -140,6 +171,7 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
         enrolled: initial?.enrolled ?? 0,
         image: image || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80",
         videoUrl: f.videoUrl || undefined,
+        sequential: f.sequential,
         materialFiles: uploaded,
         certification: f.certification,
         facilitator: facilitatorName,
@@ -229,7 +261,14 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="form-field">Cover image URL<input value={f.image} onChange={(e) => set("image", e.target.value)} placeholder="https://... (or upload below)" /></label>
           <label className="form-field">Upload cover image<input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] || null)} /></label>
-          <label className="form-field sm:col-span-2">Intro / lesson video URL<input value={f.videoUrl} onChange={(e) => set("videoUrl", e.target.value)} placeholder="YouTube, Vimeo, or direct .mp4" /></label>
+          <label className="form-field sm:col-span-2">Course-wide video URL <span className="font-normal text-slate-400">(fallback for lessons without their own)</span><input value={f.videoUrl} onChange={(e) => set("videoUrl", e.target.value)} placeholder="YouTube, Vimeo, or direct .mp4" /></label>
+          <label className="sm:col-span-2 flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <input type="checkbox" checked={f.sequential} onChange={(e) => set("sequential", e.target.checked)} className="mt-0.5 h-4 w-4 accent-lani-green" />
+            <span>
+              <span className="font-semibold text-lani-navy">Sequential modules</span>
+              <span className="mt-0.5 block text-xs text-slate-500">Learners must finish each module before the next one unlocks.</span>
+            </span>
+          </label>
         </div>
 
         {/* Descriptions */}
@@ -278,6 +317,14 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
                   <span className="text-[10px] text-slate-400">Locked content still counts toward the learner's total.</span>
                 </div>
 
+                {/* Module video (fallback for lessons in this module without their own) */}
+                <div className="mt-3 ml-6 rounded-lg border border-slate-100 bg-white p-3">
+                  <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500"><Video size={12} className="text-lani-green" /> Module video (optional)</span>
+                  <input value={mod.videoUrl} onChange={(e) => setModuleVideoUrl(i, e.target.value)} placeholder="YouTube / Vimeo / .mp4 link" className="mt-1.5 min-h-9 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-lani-green" />
+                  <input type="file" accept="video/*" onChange={(e) => pickVideo(e.target.files?.[0] || null, (fl) => setModuleVideoFile(i, fl))} className="mt-1.5 block w-full text-[10px] file:mr-2 file:rounded file:border-0 file:bg-lani-mist file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-lani-green" />
+                  <span className="mt-1 block text-[10px] text-slate-400">{mod.videoFile ? `Selected: ${mod.videoFile.name}` : `Upload a video (max ${MAX_VIDEO_MB}MB) or paste a link.`}</span>
+                </div>
+
                 <div className="mt-3 grid gap-3 pl-6">
                   {mod.lessons.map((les, li) => (
                     <div key={li} className="rounded-lg border border-slate-100 bg-white p-2">
@@ -297,6 +344,12 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
                         </div>
                       )}
                       <input type="file" multiple accept="application/pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,image/*" onChange={(e) => setLessonFiles(i, li, Array.from(e.target.files || []))} className="mt-1.5 ml-8 block text-[10px] file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-0.5 file:text-[10px] file:font-bold file:text-lani-navy" />
+                      {/* Lesson video */}
+                      <div className="mt-1.5 ml-8 flex flex-col gap-1.5 sm:flex-row sm:items-center">
+                        <input value={les.videoUrl} onChange={(e) => setLessonVideoUrl(i, li, e.target.value)} placeholder="Lesson video link (optional)" className="min-h-8 flex-1 rounded border border-slate-200 px-2 text-[11px] outline-none focus:border-lani-green" />
+                        <input type="file" accept="video/*" onChange={(e) => pickVideo(e.target.files?.[0] || null, (fl) => setLessonVideoFile(i, li, fl))} className="block text-[10px] file:mr-2 file:rounded file:border-0 file:bg-lani-mist file:px-2 file:py-0.5 file:text-[10px] file:font-bold file:text-lani-green" />
+                      </div>
+                      {les.videoFile && <span className="mt-0.5 ml-8 block text-[10px] text-slate-400">Selected: {les.videoFile.name}</span>}
                     </div>
                   ))}
                   <button type="button" onClick={() => addLesson(i)} className="justify-self-start text-xs font-bold text-lani-blue hover:underline inline-flex items-center gap-1"><Plus size={11} />Add lesson</button>

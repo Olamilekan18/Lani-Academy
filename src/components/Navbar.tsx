@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import {
   BookOpen,
@@ -23,6 +23,22 @@ export default function Navbar({ currentView, onNavigate }: NavbarProps) {
   const { user, profile, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  // Close the profile menu when clicking anywhere outside it, or on Escape.
+  useEffect(() => {
+    if (!profileOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setProfileOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [profileOpen]);
 
   const userRole = user ? profile?.role ?? "learner" : "visitor";
   const displayName = user ? profile?.full_name || profile?.email || "User" : "Guest";
@@ -134,7 +150,7 @@ export default function Navbar({ currentView, onNavigate }: NavbarProps) {
         {/* Right actions */}
         <div className="hidden items-center gap-2.5 md:flex">
           {user ? (
-            <div className="relative">
+            <div className="relative" ref={profileRef}>
               <button
                 type="button"
                 onClick={() => setProfileOpen(!profileOpen)}

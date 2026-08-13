@@ -60,23 +60,25 @@ export default function CertificateModal({
       <div className="relative w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 print:shadow-none print:border-0 print:rounded-none">
         
         {/* Controls - Hidden during printing */}
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-3 print:hidden">
-          <div className="flex items-center gap-2 text-sm font-semibold text-lani-navy">
-            <Award size={18} className="text-lani-gold" />
-            <span>Official Certification File</span>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-3 print:hidden sm:px-6">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-lani-navy">
+            <Award size={18} className="shrink-0 text-lani-gold" />
+            <span className="truncate">Official Certification File</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="inline-flex items-center gap-2 rounded-lg bg-lani-green px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-lani-emerald disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-lani-green px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-lani-emerald disabled:opacity-60 sm:px-4"
             >
               {downloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-              {downloading ? "Preparing…" : "Download PDF"}
+              <span className="hidden sm:inline">{downloading ? "Preparing…" : "Download PDF"}</span>
+              <span className="sm:hidden">{downloading ? "…" : "PDF"}</span>
             </button>
             <button
               onClick={onClose}
-              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-lani-navy"
+              aria-label="Close"
+              className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-lani-navy"
             >
               <X size={20} />
             </button>

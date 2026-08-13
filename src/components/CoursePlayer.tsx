@@ -35,12 +35,31 @@ export default function CoursePlayer({
   const isReleased = (m: Course["modules"][number]) =>
     !m.draft && (!m.releaseAt || new Date(m.releaseAt).getTime() <= nowMs);
 
-  // Extract all lessons into a flat list for simple navigation.
-  // Locked (unreleased) lessons stay in the list — they count toward the total
-  // but can't be opened or completed until their module is released.
-  const allLessons = course.modules.flatMap((m) =>
-    m.lessons.map((l) => ({ moduleTitle: m.title, lessonTitle: l, released: isReleased(m), releaseAt: m.releaseAt }))
+  // Extract all lessons into a flat list for simple navigation. Each lesson
+  // remembers its module index so we can compute access (drip + sequential).
+  const allLessons = course.modules.flatMap((m, moduleIndex) =>
+    m.lessons.map((l) => ({ moduleTitle: m.title, moduleIndex, lessonTitle: l, releaseAt: m.releaseAt }))
   );
+
+  // A module is "complete" once every one of its lessons is completed. (Lesson
+  // completion already requires opening its materials.)
+  const moduleLessonsComplete = (modIdx: number, comp: string[]): boolean => {
+    const mod = course.modules[modIdx];
+    return !!mod && mod.lessons.length > 0 && mod.lessons.every((l) => comp.includes(l));
+  };
+
+  // Whether a module is accessible: it must be drip-released AND, when the
+  // course is sequential, every earlier module must be released + fully done.
+  const isModuleAccessible = (modIdx: number, comp: string[]): boolean => {
+    const mod = course.modules[modIdx];
+    if (!mod) return true;
+    if (!isReleased(mod)) return false;
+    if (!course.sequential) return true;
+    for (let k = 0; k < modIdx; k++) {
+      if (!isReleased(course.modules[k]) || !moduleLessonsComplete(k, comp)) return false;
+    }
+    return true;
+  };
 
   // Every downloadable/viewable material across the course, module and lesson scopes
   const allMaterials: Material[] = [
@@ -61,9 +80,9 @@ export default function CoursePlayer({
   ];
 
   const initialCompleted = enrollment.completedLessons || [];
-  // Resume at the first released, incomplete lesson; fall back to the first released lesson.
-  const firstIncomplete = allLessons.findIndex((l) => l.released && !initialCompleted.includes(l.lessonTitle));
-  const firstReleased = allLessons.findIndex((l) => l.released);
+  // Resume at the first accessible, incomplete lesson; fall back to the first accessible lesson.
+  const firstIncomplete = allLessons.findIndex((l) => isModuleAccessible(l.moduleIndex, initialCompleted) && !initialCompleted.includes(l.lessonTitle));
+  const firstReleased = allLessons.findIndex((l) => isModuleAccessible(l.moduleIndex, initialCompleted));
   const startIndex = firstIncomplete !== -1 ? firstIncomplete : firstReleased !== -1 ? firstReleased : 0;
 
   const [activeLessonIndex, setActiveLessonIndex] = useState(startIndex);
@@ -89,9 +108,10 @@ export default function CoursePlayer({
 
   const activeLesson = allLessons[activeLessonIndex] || {
     moduleTitle: "Introduction",
+    moduleIndex: 0,
     lessonTitle: "Welcome to LANI Academy",
   };
-  const activeReleased = allLessons[activeLessonIndex]?.released ?? true;
+  const activeReleased = isModuleAccessible(activeLesson.moduleIndex, completed);
 
   const pct = Math.min(
     100,
@@ -104,6 +124,14 @@ export default function CoursePlayer({
   const moduleMaterials = activeModule?.materials || [];
   const lessonMaterials = activeModule?.lessonMaterials?.[activeLesson.lessonTitle] || [];
   const activeNote = notes[activeLesson.lessonTitle];
+
+  // Resolve which video plays for the active lesson: lesson video → module
+  // video → course-wide video.
+  const activeVideoUrl =
+    activeModule?.lessonVideos?.[activeLesson.lessonTitle] ||
+    activeModule?.videoUrl ||
+    course.videoUrl ||
+    "";
 
   // Every real (viewable) material shown for the active lesson — lesson, module,
   // and course scopes. All of these must be opened before the learner can
@@ -176,10 +204,13 @@ export default function CoursePlayer({
 
   const handleNextLesson = () => {
     const currentTitle = activeLesson.lessonTitle;
+    // Account for the lesson we're completing right now when checking access —
+    // finishing the last lesson of a module may unlock the next one.
+    const nextCompleted = completed.includes(currentTitle) ? completed : [...completed, currentTitle];
     if (!completed.includes(currentTitle)) toggleLessonComplete(currentTitle);
-    // Advance to the next *released* lesson, skipping locked ones.
-    const nextReleased = allLessons.findIndex((l, i) => i > activeLessonIndex && l.released);
-    if (nextReleased !== -1) setActiveLessonIndex(nextReleased);
+    // Advance to the next accessible lesson, skipping locked ones.
+    const nextIdx = allLessons.findIndex((l, i) => i > activeLessonIndex && isModuleAccessible(l.moduleIndex, nextCompleted));
+    if (nextIdx !== -1) setActiveLessonIndex(nextIdx);
   };
 
   // A single viewable/downloadable material row
@@ -267,8 +298,8 @@ export default function CoursePlayer({
               small screens so it isn't a tiny strip. */}
           <div className="mx-auto w-full max-w-[calc((100dvh_-_11rem)*16/9)] max-sm:-mx-3 max-sm:w-auto max-sm:max-w-none">
             <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl max-sm:rounded-none max-sm:border-x-0">
-              {course.videoUrl ? (
-                renderVideo(course.videoUrl)
+              {activeVideoUrl ? (
+                renderVideo(activeVideoUrl)
               ) : (
                 <>
                   <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 to-slate-900 opacity-60" />
@@ -298,6 +329,8 @@ export default function CoursePlayer({
               <p className="mt-3 text-sm leading-6 text-slate-400">
                 {activeReleased
                   ? <>In this segment of <strong>{activeLesson.lessonTitle}</strong>, we cover key concepts, business applications, and case references. Open every accompanying material below to unlock <strong>Complete and Continue</strong>.</>
+                  : course.sequential
+                  ? "This module is locked. Finish the previous module first to unlock it — it's already counted in your course total."
                   : "This content hasn't been released yet. Check back when your facilitator publishes the next module — it's already counted in your course total."}
               </p>
 
@@ -435,6 +468,9 @@ export default function CoursePlayer({
           <div className="divide-y divide-slate-850 flex-1 overflow-y-auto">
             {course.modules.map((mod, modIdx) => {
               const modReleased = isReleased(mod);
+              const modAccessible = isModuleAccessible(modIdx, completed);
+              // Drip-released but locked by sequential progression.
+              const seqLocked = modReleased && !modAccessible;
               const releaseLabel = mod.releaseAt ? new Date(mod.releaseAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : null;
               return (
               <div key={mod.title} className="p-4">
@@ -442,9 +478,9 @@ export default function CoursePlayer({
                   <h3 className="text-xs font-bold uppercase tracking-wider text-lani-gold">
                     Module {modIdx + 1}: {mod.title}
                   </h3>
-                  {!modReleased && (
+                  {!modAccessible && (
                     <span className="flex shrink-0 items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[9px] font-bold text-slate-400">
-                      <Lock size={9} />{releaseLabel ? `Releases ${releaseLabel}` : "Coming soon"}
+                      <Lock size={9} />{seqLocked ? "Finish previous" : releaseLabel ? `Releases ${releaseLabel}` : "Coming soon"}
                     </span>
                   )}
                 </div>
@@ -454,7 +490,7 @@ export default function CoursePlayer({
                     const isActive = idx === activeLessonIndex;
                     const isDone = completed.includes(les);
 
-                    if (!modReleased) {
+                    if (!modAccessible) {
                       return (
                         <div key={les} className="flex items-center gap-2.5 rounded-lg p-2.5 text-xs text-slate-500">
                           <Lock size={13} className="mt-0.5 shrink-0 text-slate-600" />

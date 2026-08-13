@@ -48,6 +48,11 @@ export type CourseModule = {
   materials?: { name: string; url: string }[];
   // Per-lesson downloadable materials, keyed by lesson title.
   lessonMaterials?: Record<string, { name: string; url: string }[]>;
+  // Module-level lesson video (URL or uploaded file). Used when a lesson has
+  // no video of its own. Falls back further to the course-wide videoUrl.
+  videoUrl?: string;
+  // Per-lesson video, keyed by lesson title (URL or uploaded file).
+  lessonVideos?: Record<string, string>;
   // Drip release control:
   //  - draft: true  → hidden/locked until the facilitator publishes it
   //  - releaseAt    → ISO datetime; locked until this moment, then auto-unlocks
@@ -85,6 +90,8 @@ export type Course = {
   enrolled: number;
   featured: boolean;
   videoUrl?: string;
+  // When true, learners must finish each module before the next unlocks.
+  sequential?: boolean;
   materialFiles?: { name: string; url: string }[];
 };
 

@@ -547,6 +547,7 @@ ALTER TABLE public.cms_assets ADD COLUMN IF NOT EXISTS url TEXT;
 -- Course intro video + downloadable material files
 ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS video_url TEXT;
 ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS material_files JSONB DEFAULT '[]';
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS sequential BOOLEAN DEFAULT false;
 
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('media', 'media', true)

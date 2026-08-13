@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { BookOpen, Award, CreditCard, PlayCircle, ShieldCheck, Calendar, ClipboardCheck, User, Bell, ChevronRight, CheckCircle, Clock, FileText, ExternalLink, TrendingUp, AlertCircle, Upload, Send, Loader2, Star, MessageSquare } from "lucide-react";
 import type { Course, Enrollment, Certificate, Transaction, Quiz, QuizAttempt, Assignment, AssignmentSubmission, Announcement, CalendarEvent, Notification, Survey, SurveyResponse, DiscussionPost } from "../lib/types";
-import { formatMoney, formatDate } from "../lib/utils";
+import { formatMoney, formatDate, externalUrl } from "../lib/utils";
 import toast from "react-hot-toast";
 import QuizModal from "../components/QuizModal";
 import CourseForum from "../components/CourseForum";
@@ -463,7 +463,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
                 <h3 className="text-sm font-bold text-lani-navy mt-0.5">{ev.title}</h3>
                 <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2"><Clock size={12}/>{formatDate(ev.date)} • {ev.time} • {ev.venue}</p>
               </div>
-              {ev.meetingLink && <a href={ev.meetingLink} target="_blank" rel="noopener noreferrer" className="btn-primary min-h-9 px-4 text-xs gap-1"><ExternalLink size={13}/>Join</a>}
+              {ev.meetingLink && <a href={externalUrl(ev.meetingLink)} target="_blank" rel="noopener noreferrer" className="btn-primary min-h-9 px-4 text-xs gap-1"><ExternalLink size={13}/>Join</a>}
               {!ev.meetingLink && <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-bold ${ev.type==="Assessment Deadline"?"bg-red-50 text-lani-coral":"bg-slate-100 text-slate-500"}`}>{ev.type}</span>}
             </div>
           )) : (

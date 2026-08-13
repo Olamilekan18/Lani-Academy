@@ -15,6 +15,7 @@ import {
   Leaf,
   HeartHandshake,
   ArrowRight,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { dbSaveLead, dbSendTemplateEmail } from "../lib/db";
@@ -57,7 +58,147 @@ const samplePrograms = [
   "Executive Leadership Retreat",
 ];
 
+// Map a delivery-format card to the closest valid DeliveryMode. The exact
+// format the user clicked is also recorded in the lead's notes so admin sees it.
+const FORMAT_TO_MODE: Record<string, DeliveryMode> = {
+  "In-plant": "In-plant",
+  "Customised": "Instructor-led",
+  "Executive": "Instructor-led",
+  "Hybrid": "Hybrid",
+  "Virtual": "Virtual",
+  "On-site embedded": "In-plant",
+};
+
+type FormatModel = { icon: any; title: string; desc: string };
+
+// Popup form to request a specific B2B delivery format. Submits a corporate
+// lead (same pipeline as the main proposal form) so it reaches the admin.
+function FormatRequestModal({
+  format,
+  thematicAreas,
+  onClose,
+}: {
+  format: FormatModel;
+  thematicAreas: string[];
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const fd = new FormData(e.currentTarget);
+    const need = (fd.get("need") as string) || "";
+    const leadData = {
+      id: "lead-" + Math.random().toString(36).substring(2, 8),
+      organisation: fd.get("organisation") as string,
+      sector: (fd.get("sector") as string) || "Other Services",
+      contactName: fd.get("contactName") as string,
+      email: fd.get("email") as string,
+      phone: (fd.get("phone") as string) || "",
+      thematicArea: (fd.get("thematicArea") as string) || thematicAreas[0] || "",
+      participants: parseInt(fd.get("participants") as string) || 0,
+      deliveryMode: (FORMAT_TO_MODE[format.title] || "Hybrid") as DeliveryMode,
+      preferredDate: (fd.get("preferredDate") as string) || "",
+      need: `[Delivery format requested: ${format.title}] ${need}`.trim(),
+      stage: "New" as const,
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+    try {
+      const ok = await dbSaveLead(leadData);
+      if (ok) {
+        void dbSendTemplateEmail(leadData.email, "lead_ack", { name: leadData.contactName, organisation: leadData.organisation });
+        setSubmitted(true);
+      } else {
+        setError("Could not submit your request. Please try again.");
+      }
+    } catch {
+      setError("Could not submit your request. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
+          <div className="flex items-start gap-3">
+            <div className="feature-icon shrink-0"><format.icon size={20} /></div>
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-lani-green">Request B2B training</span>
+              <h3 className="text-lg font-bold text-lani-navy">{format.title}</h3>
+              <p className="mt-0.5 text-xs leading-5 text-slate-500">{format.desc}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <X size={18} />
+          </button>
+        </div>
+
+        {submitted ? (
+          <div className="space-y-4 p-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-lani-green/10 text-lani-green">
+              <CheckCircle size={28} />
+            </div>
+            <h3 className="text-lg font-bold text-lani-navy">Request sent</h3>
+            <p className="mx-auto max-w-sm text-xs leading-6 text-slate-500">
+              Your <strong>{format.title}</strong> training request has been sent to our team. A LANI
+              consultant will get back to you within 48 business hours.
+            </p>
+            <button onClick={onClose} className="btn-primary text-xs px-5">Done</button>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="grid gap-4 p-6 sm:grid-cols-2">
+            {error && <div className="sm:col-span-2 rounded bg-red-50 p-3 text-xs font-semibold text-red-600">{error}</div>}
+            <label className="form-field sm:col-span-2">Organisation Name<input name="organisation" required placeholder="e.g. Frontier Minerals" /></label>
+            <label className="form-field">Contact Person<input name="contactName" required placeholder="e.g. Elizabeth Cole" /></label>
+            <label className="form-field">Work Email<input name="email" type="email" required placeholder="name@company.com" /></label>
+            <label className="form-field">Phone<input name="phone" placeholder="+234..." /></label>
+            <label className="form-field">Approx. Participants<input name="participants" type="number" min={1} defaultValue={25} required /></label>
+            <label className="form-field">Sector / Industry
+              <select name="sector">
+                <option>Financial Services</option>
+                <option>Energy &amp; Minerals</option>
+                <option>Public Administration</option>
+                <option>Agriculture &amp; Biotech</option>
+                <option>Technology &amp; Products</option>
+                <option>Other Services</option>
+              </select>
+            </label>
+            <label className="form-field">Preferred Start Date<input name="preferredDate" type="date" /></label>
+            <label className="form-field sm:col-span-2">Thematic Focus Area
+              <select name="thematicArea">
+                {thematicAreas.map((area) => <option key={area} value={area}>{area}</option>)}
+              </select>
+            </label>
+            <label className="form-field sm:col-span-2">Objectives &amp; requirements
+              <textarea name="need" required rows={3} placeholder="Participant background, current skill gaps, and what you'd like this format to achieve..." />
+            </label>
+            <div className="sm:col-span-2">
+              <button type="submit" disabled={loading} className="btn-primary w-full justify-center text-sm font-extrabold">
+                {loading ? (<><Loader2 size={16} className="animate-spin" /> Sending request...</>) : `Request ${format.title} training`}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Corporate({ thematicAreas }: CorporateProps) {
+  const [activeFormat, setActiveFormat] = useState<FormatModel | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
@@ -136,11 +277,19 @@ export default function Corporate({ thematicAreas }: CorporateProps) {
         </div>
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {trainingModels.map((m) => (
-            <div key={m.title} className="info-card">
+            <button
+              key={m.title}
+              type="button"
+              onClick={() => setActiveFormat(m)}
+              className="info-card w-full text-left transition-all hover:-translate-y-1 hover:border-lani-green/30 hover:shadow-soft focus:outline-none focus:ring-2 focus:ring-lani-green/30"
+            >
               <div className="feature-icon"><m.icon size={20} /></div>
               <h3 className="mt-4 text-base font-bold text-lani-navy">{m.title}</h3>
               <p className="mt-2 text-xs leading-6 text-slate-500">{m.desc}</p>
-            </div>
+              <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-lani-green">
+                Request this format <ArrowRight size={13} />
+              </span>
+            </button>
           ))}
         </div>
       </section>
@@ -315,6 +464,14 @@ export default function Corporate({ thematicAreas }: CorporateProps) {
           </div>
         </div>
       </section>
+
+      {activeFormat && (
+        <FormatRequestModal
+          format={activeFormat}
+          thematicAreas={thematicAreas}
+          onClose={() => setActiveFormat(null)}
+        />
+      )}
     </div>
   );
 }

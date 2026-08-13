@@ -517,16 +517,21 @@ export async function dbSendTemplateEmail(
 // Maximum allowed upload size across the whole app.
 export const MAX_UPLOAD_MB = 5;
 export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+// Videos get a larger ceiling.
+export const MAX_VIDEO_MB = 20;
+export const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
 
 /**
  * Client-side upload validation. Returns a human-readable error string if the
  * file is invalid (too large / dangerous type), or null if it's acceptable.
  * Use this in the UI to give friendly feedback before calling dbUploadFile.
+ * Pass `maxBytes` to override the default 5MB ceiling (e.g. for videos).
  */
-export function validateUpload(file: File, allowedTypes?: string[]): string | null {
-  if (file.size > MAX_UPLOAD_BYTES) {
+export function validateUpload(file: File, allowedTypes?: string[], maxBytes: number = MAX_UPLOAD_BYTES): string | null {
+  if (file.size > maxBytes) {
     const mb = (file.size / (1024 * 1024)).toFixed(1);
-    return `File is too large (${mb}MB). Maximum upload size is ${MAX_UPLOAD_MB}MB.`;
+    const limitMb = Math.round(maxBytes / (1024 * 1024));
+    return `File is too large (${mb}MB). Maximum upload size is ${limitMb}MB.`;
   }
   const ext = (file.name.includes(".") ? file.name.split(".").pop() || "" : "").toLowerCase();
   const dangerousExts = ["html", "htm", "svg", "js", "mjs", "php", "sh", "exe", "cmd", "bat", "vbs", "jar", "py"];
@@ -540,12 +545,12 @@ export function validateUpload(file: File, allowedTypes?: string[]): string | nu
   return null;
 }
 
-export async function dbUploadFile(file: File, folder = "assets", allowedTypes?: string[]): Promise<string | null> {
+export async function dbUploadFile(file: File, folder = "assets", allowedTypes?: string[], maxBytes: number = MAX_UPLOAD_BYTES): Promise<string | null> {
   if (!supabase) return null;
 
-  // Enforce the global 5MB upload ceiling.
-  if (file.size > MAX_UPLOAD_BYTES) {
-    console.error(`Upload blocked: file exceeds ${MAX_UPLOAD_MB}MB limit`, file.size);
+  // Enforce the upload ceiling (5MB by default, larger for videos).
+  if (file.size > maxBytes) {
+    console.error(`Upload blocked: file exceeds ${Math.round(maxBytes / (1024 * 1024))}MB limit`, file.size);
     return null;
   }
 

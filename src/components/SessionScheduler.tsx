@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Calendar, Clock, MapPin, Video, Send, Trash2, ExternalLink, UserCheck, Loader2 } from "lucide-react";
 import type { Course, CalendarEvent, Enrollment, AttendanceRecord } from "../lib/types";
-import { formatDate } from "../lib/utils";
+import { formatDate, externalUrl } from "../lib/utils";
 import toast from "react-hot-toast";
 
 interface Props {
@@ -77,7 +77,7 @@ export default function SessionScheduler({ courses, events, enrollments, attenda
       date,
       time: time || "TBC",
       venue: venue.trim() || (link ? "Online" : "TBC"),
-      meetingLink: link.trim() || undefined,
+      meetingLink: link.trim() ? externalUrl(link) : undefined,
     };
     setSaving(true);
     await onSave(event);
@@ -131,7 +131,7 @@ export default function SessionScheduler({ courses, events, enrollments, attenda
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-slate-500">
                   <span className="inline-flex items-center gap-1"><Clock size={12} /> {formatDate(ev.date)} · {ev.time}</span>
                   {ev.venue && <span className="inline-flex items-center gap-1"><MapPin size={12} /> {ev.venue}</span>}
-                  {ev.meetingLink && <a href={ev.meetingLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold text-lani-blue hover:underline"><ExternalLink size={12} /> Link</a>}
+                  {ev.meetingLink && <a href={externalUrl(ev.meetingLink)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold text-lani-blue hover:underline"><ExternalLink size={12} /> Link</a>}
                   {recs.length > 0 && <span className="inline-flex items-center gap-1 font-bold text-lani-green"><UserCheck size={12} /> {present}/{recs.length} present</span>}
                 </p>
               </div>
