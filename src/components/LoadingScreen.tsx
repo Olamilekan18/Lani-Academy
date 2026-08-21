@@ -1,5 +1,5 @@
 import React from "react";
-import { BookOpen } from "lucide-react";
+import LogoIcon from "./LogoIcon";
 
 interface LoadingScreenProps {
   message?: string;
@@ -30,17 +30,17 @@ export default function LoadingScreen({
       <div className="relative z-10 flex flex-col items-center">
         {/* Logo mark with a pulsing halo */}
         <div className="relative" style={{ animation: "laniFloat 3s ease-in-out infinite" }}>
-          <span className="absolute -inset-3 rounded-2xl border border-lani-emerald/30 animate-ping" />
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-lani-green to-lani-emerald shadow-2xl">
-            <BookOpen size={30} />
+          <span className="absolute -inset-3 rounded-full border border-lani-blue/30 animate-ping" />
+          <div className="flex h-16 w-16 items-center justify-center">
+            <LogoIcon className="h-full w-full text-lani-blue drop-shadow-[0_0_15px_rgba(11,102,195,0.6)]" />
           </div>
         </div>
 
         {/* Wordmark */}
         <div className="mt-6 text-center">
           <span className="block text-2xl font-black leading-none tracking-tight">LANI</span>
-          <span className="mt-1 block text-[11px] font-bold uppercase tracking-[0.35em] text-lani-gold">
-            Academy
+          <span className="mt-1 block text-[11px] font-bold uppercase tracking-[0.35em] text-lani-blue">
+            ACADEMY
           </span>
         </div>
 

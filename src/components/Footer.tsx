@@ -1,6 +1,7 @@
 import React from "react";
 import { BookOpen, MapPin, Mail, Phone, ExternalLink } from "lucide-react";
 import toast from "react-hot-toast";
+import LogoIcon from "./LogoIcon";
 import { dbSubscribeNewsletter } from "../lib/db";
 import type { View } from "../lib/types";
 
@@ -18,15 +19,13 @@ export default function Footer({ onNavigate }: FooterProps) {
           {/* Brand & Mission */}
           <div className="space-y-6">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-lani-green to-lani-emerald text-white shadow">
-                <BookOpen size={20} />
-              </div>
+              <LogoIcon className="h-9 w-9 text-white" />
               <div>
                 <span className="block text-lg font-black tracking-tight text-white leading-none">
                   LANI
                 </span>
-                <span className="text-[10px] font-bold tracking-widest text-lani-gold uppercase leading-none block mt-0.5">
-                  Academy
+                <span className="text-[10px] font-bold tracking-widest text-lani-blue uppercase leading-none block mt-0.5">
+                  ACADEMY
                 </span>
               </div>
             </div>

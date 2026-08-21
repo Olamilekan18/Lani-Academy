@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import LogoIcon from "./LogoIcon";
 import {
   BookOpen,
   Shield,
@@ -119,12 +120,10 @@ export default function Navbar({ currentView, onNavigate }: NavbarProps) {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand */}
         <button onClick={() => onNavigate("home")} className="flex items-center gap-2.5 focus:outline-none">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-lani-green to-lani-emerald text-white shadow-sm">
-            <BookOpen size={20} />
-          </div>
+          <LogoIcon className="h-9 w-9 text-lani-blue" />
           <div className="text-left">
             <span className="block text-lg font-black leading-none tracking-tight text-lani-navy">LANI</span>
-            <span className="mt-0.5 block text-[10px] font-bold uppercase leading-none tracking-[0.2em] text-lani-gold">Academy</span>
+            <span className="mt-0.5 block text-[10px] font-bold uppercase leading-none tracking-[0.2em] text-lani-blue">ACADEMY</span>
           </div>
         </button>
 
