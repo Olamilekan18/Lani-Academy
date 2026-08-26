@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { dbSendTemplateEmail, dbUploadFile, validateUpload, MAX_UPLOAD_MB } from "../lib/db";
-import { LogIn, UserPlus, Key, Mail, ShieldAlert, Loader2, Sparkles, BookOpen, Shield, Video, FileText } from "lucide-react";
+import { LogIn, UserPlus, Key, Mail, ShieldAlert, Loader2, Sparkles, BookOpen, Shield, Video, FileText, Eye, EyeOff } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 interface LoginProps {
@@ -42,6 +42,7 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
   const [city, setCity] = useState("");
   const [gender, setGender] = useState("");
   const [dob, setDob] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -103,9 +104,20 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
             updatePayload.state_region = stateRegion;
             updatePayload.city = city;
             updatePayload.gender = gender;
-            updatePayload.date_of_birth = dob || null;
+            updatePayload.date_of_birth = dob && dob.length === 10
+              ? dob.slice(6, 10) + "-" + dob.slice(3, 5) + "-" + dob.slice(0, 2)
+              : null;
           }
-          await updateProfile(updatePayload);
+          const { error: profileErr } = await updateProfile(updatePayload);
+          // A learner's role is already set by default at account creation, so a
+          // failed details update there isn't fatal — let them in. But a
+          // facilitator / organization account depends on the role update
+          // succeeding; if it failed, surface it instead of sending them to a
+          // dashboard that will bounce them.
+          if (profileErr && (portalRole === "facilitator" || portalRole === "organization")) {
+            setError(`Your account was created, but we couldn't set it up as a ${portalRole} account. ${profileErr}`);
+            return;
+          }
 
           // Welcome email (no-op until Resend is connected)
           void dbSendTemplateEmail(email, "welcome", { name: fullName, role: portalRole });
@@ -341,10 +353,26 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
                     <label className="form-field">
                       Date of Birth
                       <input
-                        type="date"
+                        type="text"
+                        inputMode="numeric"
                         value={dob}
-                        onChange={(e) => setDob(e.target.value)}
-                        max={new Date().toISOString().split("T")[0]}
+                        onChange={(e) => {
+                          // Allow only digits and dashes, auto-insert dashes at dd- and dd-mm-
+                          let v = e.target.value.replace(/[^0-9-]/g, "");
+                          // Remove extra dashes the user may type manually
+                          const digits = v.replace(/-/g, "");
+                          // Auto-format: dd-mm-yyyy
+                          if (digits.length <= 2) {
+                            v = digits;
+                          } else if (digits.length <= 4) {
+                            v = digits.slice(0, 2) + "-" + digits.slice(2);
+                          } else {
+                            v = digits.slice(0, 2) + "-" + digits.slice(2, 4) + "-" + digits.slice(4, 8);
+                          }
+                          setDob(v);
+                        }}
+                        placeholder="dd-mm-yyyy"
+                        maxLength={10}
                       />
                     </label>
                   </div>
@@ -354,7 +382,7 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
           )}
 
           <label className="form-field">
-            Work Email Address
+            Email Address
             <input
               type="email"
               required
@@ -365,16 +393,28 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
           </label>
 
           {mode !== "reset" && (
-            <label className="form-field">
-              Password
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </label>
+            <div className="form-field">
+              <span>Password</span>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((p) => !p)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
           )}
 
           <button

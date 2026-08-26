@@ -956,6 +956,23 @@ export async function dbGetFacilitators(): Promise<{fullName: string, email: str
   return toCamelCaseKeys(data || []) as {fullName: string, email: string}[];
 }
 
+// Admin-only: change a user's account role by email (e.g. revoke a facilitator
+// back to a learner). Relies on the "Admins can update any profile" RLS policy;
+// the role-escalation trigger records the change as admin-set so the user can
+// no longer self-select a role afterwards.
+export async function dbSetUserRoleByEmail(
+  email: string,
+  role: "learner" | "facilitator" | "organization"
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: "Supabase not configured" };
+  const { error } = await supabase.from("profiles").update({ role }).eq("email", email);
+  if (error) {
+    console.error("Error updating user role:", error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
 export async function dbSaveFacilitatorAssignment(assignment: FacilitatorAssignment): Promise<boolean> {
   if (!supabase) return false;
   const { error } = await supabase.from("facilitator_assignments").upsert(toSnakeCaseKeys(assignment));
@@ -1018,14 +1035,15 @@ export async function dbDeleteNote(id: string): Promise<boolean> {
   return !error;
 }
 
-// Look up a single certificate by ID (case-insensitive). Certificates are
-// publicly readable, so this works for anonymous verification too.
+// Look up a single certificate by ID (case-insensitive) for public
+// verification. Certificates are NOT publicly readable at the table level
+// (that would leak every learner's details); instead this calls the
+// SECURITY DEFINER verify_certificate() RPC, which returns only the single
+// row whose ID exactly matches. Works for anonymous verification too.
 export async function dbFindCertificate(id: string): Promise<Certificate | null> {
   if (!supabase || !id.trim()) return null;
   const { data, error } = await supabase
-    .from("certificates")
-    .select("*")
-    .ilike("id", id.trim())
+    .rpc("verify_certificate", { cert_id: id.trim() })
     .maybeSingle();
   if (error) { console.error("Error verifying certificate:", error.message); return null; }
   return data ? (toCamelCaseKeys(data) as Certificate) : null;

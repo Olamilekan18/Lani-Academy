@@ -65,6 +65,7 @@ import {
   dbGetNotifications,
   dbGetFacilitatorAssignments,
   dbGetFacilitators,
+  dbSetUserRoleByEmail,
   dbSaveAnnouncement,
   dbSaveAssignmentSubmission,
   dbUpdateAssignmentSubmission,
@@ -212,12 +213,12 @@ export default function App() {
       // Proactively check database connection with a 5-second timeout race
       const testPromise = supabase.from("courses").select("id").limit(1);
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Connection timed out. Remote database is unreachable.")), 5000)
+        setTimeout(() => reject(new Error("We're having trouble reaching our servers. This is usually temporary — please try again in a moment.")), 5000)
       );
 
       const result = await Promise.race([testPromise, timeoutPromise]) as any;
       if (result.error) {
-        throw new Error(`Database connection failed: ${result.error.message}. Verify that you have executed the schema.sql in your Supabase SQL editor.`);
+        throw new Error(`Something went wrong while loading your data. Our team has been notified — please try again shortly.`);
       }
 
       const dbCourses = await dbGetCourses();
@@ -660,6 +661,17 @@ export default function App() {
     }
   };
 
+  const handleRevokeFacilitator = async (email: string, name: string) => {
+    const { ok, error } = await dbSetUserRoleByEmail(email, "learner");
+    if (ok) {
+      logAudit("facilitator.revoked", "profile", email, name);
+      toast.success(`Revoked facilitator access for ${name}.`);
+      await loadDatabase();
+    } else {
+      toast.error(error || "Could not revoke facilitator.");
+    }
+  };
+
   // Action stubs for new components
   const handlePostAnnouncement = async (a: Omit<Announcement, "id"|"createdAt">) => {
     const newAnn: Announcement = { ...a, id: "ann-" + Date.now().toString(), createdAt: new Date().toISOString() };
@@ -1072,15 +1084,15 @@ export default function App() {
             </div>
 
             <div className="space-y-2">
-              <h2 className="text-xl font-extrabold text-lani-navy">Supabase Connection Error</h2>
+              <h2 className="text-xl font-extrabold text-lani-navy">Connection Issue</h2>
               <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">
-                We are unable to connect to the database right now. Please execute the schema setup or run in demo mode.
+                We're unable to reach the LANI Academy servers right now. This is usually a temporary issue — you can retry or continue browsing in offline mode.
               </p>
             </div>
 
-            <div className="rounded-lg bg-red-50/50 border border-red-100 p-4 text-left">
-              <span className="text-[9px] uppercase font-bold text-red-500 block tracking-wider mb-1">Details</span>
-              <p className="text-[11px] font-mono text-slate-600 break-words max-h-24 overflow-y-auto leading-normal">
+            <div className="rounded-lg bg-amber-50/50 border border-amber-100 p-4 text-left">
+              <span className="text-[9px] uppercase font-bold text-amber-600 block tracking-wider mb-1">What happened</span>
+              <p className="text-[11px] text-slate-600 break-words max-h-24 overflow-y-auto leading-normal">
                 {connectionError}
               </p>
             </div>
@@ -1203,7 +1215,7 @@ export default function App() {
           <LearnerDashboard
             enrollments={enrollments}
             courses={courses}
-            certificates={certificates}
+            certificates={certificates.filter((c) => c.learnerEmail?.toLowerCase() === (profile?.email || user?.email || "").toLowerCase())}
             transactions={transactions}
             quizzes={quizzes}
             quizAttempts={quizAttempts}
@@ -1293,6 +1305,7 @@ export default function App() {
             onAddAsset={handleAddAsset}
             onAddCourse={handleAddCourse}
             onAssignFacilitator={handleAssignFacilitator}
+            onRevokeFacilitator={handleRevokeFacilitator}
             onRefreshData={loadDatabase}
             onUpdatePaymentStatus={handleUpdatePaymentStatus}
             onSavePromo={handleSavePromo}

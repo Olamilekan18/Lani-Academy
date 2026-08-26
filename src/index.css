@@ -213,7 +213,7 @@
   /* Form Fields */
   .filter-field,
   .form-field {
-    @apply grid gap-2 text-sm font-bold text-lani-navy;
+    @apply grid gap-2 text-sm font-bold text-lani-navy min-w-0 overflow-hidden;
   }
 
   .filter-field span {
@@ -225,7 +225,7 @@
   .form-field input,
   .form-field select,
   .form-field textarea {
-    @apply min-h-11 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-lani-ink outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-lani-blue focus:ring-2 focus:ring-lani-blue/10;
+    @apply min-h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-lani-ink outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-lani-blue focus:ring-2 focus:ring-lani-blue/10;
   }
 
   .form-field input[type="file"] {

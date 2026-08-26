@@ -398,7 +398,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
               ))}
               {myEvents.length === 0 && <p className="text-xs text-slate-400 py-4 text-center">No upcoming events.</p>}
             </div>
-            <StreakBadges streak={streak} />
+<StreakBadges streak={streak} />
           </div>
         </div>
         </>
