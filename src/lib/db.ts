@@ -35,9 +35,7 @@ import {
   mockAssignments,
   mockSubmissions,
   mockAnnouncements,
-  mockCalendarEvents,
-  mockNotifications,
-  mockFacilitatorAssignments
+  mockNotifications
 } from "../data/mockLmsData";
 
 // Helper to convert camelCase string to snake_case
@@ -131,9 +129,7 @@ export async function seedDatabase(): Promise<boolean> {
       await supabase.from("assignments").insert(toSnakeCaseKeys(mockAssignments));
       await supabase.from("assignment_submissions").insert(toSnakeCaseKeys(mockSubmissions));
       await supabase.from("announcements").insert(toSnakeCaseKeys(mockAnnouncements));
-      await supabase.from("calendar_events").insert(toSnakeCaseKeys(mockCalendarEvents));
       await supabase.from("notifications").insert(toSnakeCaseKeys(mockNotifications));
-      await supabase.from("facilitator_assignments").insert(toSnakeCaseKeys(mockFacilitatorAssignments));
     }
 
     // Seed default Subject Matter Experts if none exist yet.

@@ -61,7 +61,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
     }
   }, [course.facilitator]);
 
-  const seatsLeft = Math.max(0, course.seats - course.enrolled);
+  const seatsLeft = course.seats === 0 ? null : Math.max(0, course.seats - course.enrolled);
 
   return (
     <div className="section bg-white text-left">
@@ -333,7 +333,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
               </div>
               <div className="flex justify-between">
                 <span>Enrolment Seats</span>
-                <span className="text-lani-navy">{seatsLeft} available</span>
+                <span className="text-lani-navy">{seatsLeft === null ? "Unlimited" : `${seatsLeft} available`}</span>
               </div>
             </div>
 

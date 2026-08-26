@@ -3,7 +3,7 @@ import { Shield, Users, Sparkles, Award, DollarSign, TrendingUp, FileText, Uploa
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
 import type { Course, Enrollment, Transaction, Certificate, CorporateLead, ProgrammeApplication, CmsAsset, FacilitatorAssignment, PromoCode, ContentItem, CalendarEvent, AttendanceRecord, Pathway, Sme, AnalyticsEvent, AuditLog } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
-import { seedDatabase, dbUploadFile, dbGetAnalyticsEvents, dbGetAuditLogs } from "../lib/db";
+import { dbUploadFile, dbGetAnalyticsEvents, dbGetAuditLogs } from "../lib/db";
 import CourseEditor from "../components/CourseEditor";
 import SessionScheduler from "../components/SessionScheduler";
 import toast from "react-hot-toast";
@@ -57,7 +57,6 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     try { return (localStorage.getItem("lani-admin-tab") as Tab) || "overview"; } catch { return "overview"; }
   });
   useEffect(() => { try { localStorage.setItem("lani-admin-tab", tab); } catch { /* ignore */ } }, [tab]);
-  const [seeding, setSeeding] = useState(false);
   const [addingAsset, setAddingAsset] = useState(false);
   const [isAddingCourse, setIsAddingCourse] = useState(false);
   const [addingCourseObj, setAddingCourseObj] = useState(false);
@@ -166,8 +165,6 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
     URL.revokeObjectURL(url);
     toast.success("Export downloaded.");
   };
-
-  const handleSeed = async () => { setSeeding(true); const ok = await seedDatabase(); if(ok){toast.success("Courses seeded!"); await onRefreshData();}else{toast.error("Seed failed.");} setSeeding(false); };
 
   const handleSubmitAsset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -502,9 +499,6 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
               </div>
             )}
           </div>
-          <button onClick={handleSeed} disabled={seeding} className="rounded-lg bg-lani-gold hover:bg-yellow-600 text-lani-navy px-4 py-2.5 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
-            <RefreshCw size={13} className={seeding?"animate-spin":""}/>{seeding?"Seeding...":"Seed Courses"}
-          </button>
           <button onClick={onRefreshData} className="rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 text-xs font-bold text-white transition-all flex items-center gap-1.5"><RefreshCw size={13}/>Refresh</button>
         </div>
       </div>
@@ -702,7 +696,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
                         <td className="text-xs">{facilitatorLabel === "—" ? <span className="text-slate-400">Unassigned</span> : <span className="font-semibold text-lani-navy">{facilitatorLabel}</span>}</td>
                         <td className="text-xs">{(c.modules||[]).length} modules · {lessons} lessons</td>
                         <td className="font-bold text-lani-navy">{formatMoney(c.price)}</td>
-                        <td><span className="text-xs font-bold">{c.enrolled}/{c.seats}</span></td>
+                        <td><span className="text-xs font-bold">{c.seats === 0 ? "∞" : `${c.enrolled}/${c.seats}`}</span></td>
                         <td><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${c.status==="Open"?"bg-lani-emerald/15 text-lani-green":c.status==="Archived"?"bg-slate-200 text-slate-500":"bg-slate-100 text-slate-500"}`}>{c.status}</span></td>
                         <td>
                           <div className="flex items-center gap-1.5">

@@ -299,7 +299,7 @@ export default function Courses({
                         {formatMoney(course.price)}
                       </strong>
                       <span className="text-[10px] text-slate-400">
-                        {course.seats ? `${seatsLeft} seats left` : "Quote required"}
+                        {course.seats === 0 ? "Unlimited seats" : `${seatsLeft} seats left`}
                       </span>
                     </div>
                     <button

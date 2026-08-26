@@ -62,6 +62,7 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
   const [deliveryModes, setDeliveryModes] = useState<DeliveryMode[]>(initial?.deliveryModes?.length ? initial.deliveryModes : ["Self-paced"]);
   const [outcomes, setOutcomes] = useState((initial?.outcomes || []).join("\n"));
   const [audience, setAudience] = useState((initial?.audience || []).join("\n"));
+  const [unlimitedSeats, setUnlimitedSeats] = useState(initial?.seats === 0);
   const [modules, setModules] = useState<DraftMod[]>(
     initial?.modules?.length
       ? initial.modules.map((m) => ({ title: m.title, lessons: toDraftLessons(m), materials: m.materials || [], newFiles: [], draft: m.draft || false, releaseAt: m.releaseAt || "", videoUrl: m.videoUrl || "", videoFile: null }))
@@ -244,7 +245,11 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
           <label className="form-field col-span-2 sm:col-span-1">Duration<input value={f.duration} onChange={(e) => set("duration", e.target.value)} placeholder="e.g. 4 Weeks" /></label>
           <label className="form-field">Start Date<input type="date" value={f.startDate} onChange={(e) => set("startDate", e.target.value)} /></label>
           <label className="form-field">End Date<input type="date" value={f.endDate} onChange={(e) => set("endDate", e.target.value)} /></label>
-          <label className="form-field">Seats<input type="number" min={0} value={f.seats} onChange={(e) => set("seats", e.target.value)} /></label>
+          <label className="form-field">Seats<input type="number" min={0} value={unlimitedSeats ? "" : f.seats} disabled={unlimitedSeats} onChange={(e) => set("seats", e.target.value)} placeholder={unlimitedSeats ? "Unlimited" : ""} /></label>
+          <div className="flex items-center gap-2 self-end pb-1">
+            <input type="checkbox" id="unlimitedSeats" checked={unlimitedSeats} onChange={(e) => { setUnlimitedSeats(e.target.checked); if (e.target.checked) set("seats", "0"); }} className="rounded" />
+            <label htmlFor="unlimitedSeats" className="text-xs font-semibold text-slate-600 cursor-pointer">Unlimited</label>
+          </div>
         </div>
 
         {/* Delivery modes */}

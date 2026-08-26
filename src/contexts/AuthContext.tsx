@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -44,6 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  // Timestamp of the last authoritative profile write (updateProfile). Used
+  // to stop a stale in-flight fetchProfile from clobbering a newer write
+  // (e.g. the learner→facilitator role set right after signup).
+  const lastProfileWrite = useRef(0);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -73,11 +77,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function fetchProfile(userId: string) {
     if (!supabase) return;
+    const startedAt = Date.now();
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .single();
+
+    // If an authoritative updateProfile ran while this read was in flight, its
+    // result is newer than ours — don't overwrite it with stale data.
+    if (lastProfileWrite.current > startedAt) {
+      setLoading(false);
+      return;
+    }
 
     if (!error && data) {
       setProfile(data as Profile);
@@ -131,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq("id", userId)
         .single();
       if (updatedProfile) {
+        lastProfileWrite.current = Date.now();
         setProfile(updatedProfile as Profile);
       }
     }
