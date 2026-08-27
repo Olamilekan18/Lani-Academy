@@ -10,12 +10,15 @@ import {
   User,
   ShieldCheck,
   Sparkles,
-  Star
+  Star,
+  Bell,
+  Video
 } from "lucide-react";
-import type { Course, CourseReview } from "../lib/types";
+import type { Course, CourseReview, CalendarEvent } from "../lib/types";
 import { formatMoney, formatDate } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import AskAI from "../components/AskAI";
+import toast from "react-hot-toast";
 
 type CourseDetailTab = "overview" | "curriculum" | "objectives" | "audience" | "reviews";
 
@@ -28,9 +31,12 @@ interface CourseDetailProps {
   onSaveReview?: (review: Partial<CourseReview>) => Promise<void> | void;
   onEnrol: () => void;
   onBack: () => void;
+  relatedCourses?: Course[];
+  upcomingSessions?: CalendarEvent[];
+  onOpenRelated?: (course: Course) => void;
 }
 
-export default function CourseDetail({ course, reviews = [], currentUserEmail = "", canReview = false, initialTab, onSaveReview, onEnrol, onBack }: CourseDetailProps) {
+export default function CourseDetail({ course, reviews = [], currentUserEmail = "", canReview = false, initialTab, onSaveReview, onEnrol, onBack, relatedCourses = [], upcomingSessions = [], onOpenRelated }: CourseDetailProps) {
   const validTabs: CourseDetailTab[] = ["overview", "curriculum", "objectives", "audience", "reviews"];
   const [activeTab, setActiveTab] = useState<CourseDetailTab>(
     (validTabs as string[]).includes(initialTab || "") ? (initialTab as CourseDetailTab) : "overview"
@@ -38,6 +44,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
   const [expandedModule, setExpandedModule] = useState<number | null>(0);
   const [facProfile, setFacProfile] = useState<any>(null);
   const [askOpen, setAskOpen] = useState(false);
+  const [reminded, setReminded] = useState(false);
 
   const myReview = reviews.find((r) => r.learnerEmail === currentUserEmail);
   const [rating, setRating] = useState<number>(myReview?.rating || 0);
@@ -63,6 +70,23 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
 
   const seatsLeft = course.seats === 0 ? null : Math.max(0, course.seats - course.enrolled);
 
+  const todayStr = new Date().toISOString().split("T")[0];
+  const upcomingLive = upcomingSessions
+    .filter((e) => e.courseId === course.id && (e.type === "Live Class" || e.type === "Webinar") && e.date >= todayStr)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const remindOfLive = () => {
+    if (!upcomingLive.length) return;
+    const next = upcomingLive[0];
+    localStorage.setItem(`lani-reminder-${course.id}`, JSON.stringify({ id: next.id, date: next.date, time: next.time, title: next.title }));
+    setReminded(true);
+    toast.success(`We'll remind you about "${next.title}" on ${next.date}.`);
+  };
+
+  const related = relatedCourses
+    .filter((c) => c.id !== course.id)
+    .slice(0, 3);
+
   return (
     <div className="section bg-white text-left">
       {/* Navigation Breadcrumb */}
@@ -76,7 +100,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
       <div className="relative mb-12 overflow-hidden rounded-2xl bg-lani-navy text-white shadow-xl">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px]" />
         
-        <div className="mx-auto grid max-w-7xl gap-8 p-8 sm:p-12 lg:grid-cols-[1.1fr_0.9fr] items-center relative z-10">
+        <div className="mx-auto grid max-w-7xl items-center gap-8 p-6 sm:p-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-stretch relative z-10">
           <div className="space-y-6">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-lani-gold ring-1 ring-white/10">
               <Sparkles size={11} />
@@ -89,30 +113,63 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
               {course.shortDescription}
             </p>
 
-            <div className="flex flex-wrap gap-6 text-xs text-slate-300">
-              <span className="flex items-center gap-2">
-                <Clock size={16} className="text-lani-gold" />
-                Duration: <strong>{course.duration}</strong>
-              </span>
-              <span className="flex items-center gap-2">
-                <GraduationCap size={16} className="text-lani-emerald" />
-                Certification: <strong>{course.certification}</strong>
-              </span>
-              <span className="flex items-center gap-2">
-                <CalendarDays size={16} className="text-lani-blue" />
-                Start: <strong>{formatDate(course.startDate)}</strong>
-              </span>
+            <div className="grid max-w-xl grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
+                <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <Clock size={13} className="text-lani-gold" /> Duration
+                </span>
+                <strong className="mt-1.5 block text-sm font-bold text-white">{course.duration}</strong>
+              </div>
+              <div className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
+                <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <GraduationCap size={13} className="text-lani-emerald" /> Certification
+                </span>
+                <strong className="mt-1.5 block text-sm font-bold text-white">{course.certification}</strong>
+              </div>
+              <div className="rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
+                <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <CalendarDays size={13} className="text-lani-blue" /> Start Date
+                </span>
+                <strong className="mt-1.5 block text-sm font-bold text-white">{formatDate(course.startDate)}</strong>
+              </div>
             </div>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-white/10 shadow-2xl">
-            <img src={course.image} alt={course.title} className="h-64 w-full object-cover sm:h-80" />
+            <img src={course.image} alt={course.title} className="h-56 w-full object-cover sm:h-72 lg:h-full lg:min-h-[22rem]" />
           </div>
         </div>
       </div>
 
+      {/* Upcoming Live Class Reminder */}
+      {upcomingLive.length > 0 && (
+        <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-lani-blue/20 bg-gradient-to-r from-lani-mist to-white p-5 sm:flex-row sm:items-center sm:justify-between shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-lani-blue text-white">
+              <Video size={18} />
+            </div>
+            <div>
+              <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-lani-blue">
+                <Bell size={11} /> Upcoming Live Class
+              </span>
+              <h4 className="mt-1 text-sm font-bold text-lani-navy">{upcomingLive[0].title}</h4>
+              <p className="text-xs text-slate-500">
+                {formatDate(upcomingLive[0].date)} · {upcomingLive[0].time} · {upcomingLive[0].venue}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={remindOfLive}
+            disabled={reminded}
+            className={`self-start sm:self-auto btn-secondary min-h-9 px-4 py-2 text-xs font-bold ${reminded ? "bg-lani-emerald/10 border-lani-emerald text-lani-green" : "text-lani-blue border-lani-blue/30 hover:bg-lani-blue/5"}`}
+          >
+            {reminded ? <><Bell size={13} /> Reminder Set</> : <><Bell size={13} /> Remind Me</>}
+          </button>
+        </div>
+      )}
+
       {/* Main Split Grid */}
-      <div className="grid gap-12 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-start lg:gap-12">
         
         {/* Left: Interactive Tabs Area */}
         <div className="space-y-8">
@@ -136,9 +193,51 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
           {/* Tab Content Panels */}
           <div className="mt-4">
             {activeTab === "overview" && (
-              <div className="space-y-6 leading-8 text-slate-600 text-sm">
+              <div className="space-y-8 text-slate-600">
+                {/* Course at a glance */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-slate-150 bg-slate-50 p-4">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <GraduationCap size={14} className="text-lani-green" /> Level
+                    </span>
+                    <strong className="mt-1.5 block text-sm font-bold text-lani-navy">{course.level}</strong>
+                  </div>
+                  <div className="rounded-xl border border-slate-150 bg-slate-50 p-4">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <Video size={14} className="text-lani-blue" /> Delivery
+                    </span>
+                    <strong className="mt-1.5 block text-sm font-bold text-lani-navy">{course.deliveryModes.join(" / ")}</strong>
+                  </div>
+                  <div className="rounded-xl border border-slate-150 bg-slate-50 p-4">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <Clock size={14} className="text-lani-gold" /> Duration
+                    </span>
+                    <strong className="mt-1.5 block text-sm font-bold text-lani-navy">{course.duration}</strong>
+                  </div>
+                  <div className="rounded-xl border border-slate-150 bg-slate-50 p-4">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <Award size={14} className="text-lani-emerald" /> Assessment
+                    </span>
+                    <strong className="mt-1.5 block text-sm font-bold text-lani-navy">{course.assessment}</strong>
+                  </div>
+                </div>
+
                 <h2 className="text-lg font-bold text-lani-navy tracking-tight">Program Focus & Context</h2>
-                <p>{course.fullDescription}</p>
+                <p className="text-sm leading-7">{course.fullDescription}</p>
+
+                {course.outcomes.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-bold text-lani-navy tracking-tight">What you&apos;ll learn</h3>
+                    <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                      {course.outcomes.slice(0, 6).map((out) => (
+                        <div key={out} className="flex gap-2.5 text-sm leading-6 text-slate-600">
+                          <ShieldCheck size={18} className="mt-0.5 shrink-0 text-lani-green" />
+                          <span>{out}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 
                 <div className="rounded-xl border border-slate-150 bg-slate-50 p-6 grid gap-4">
                   <h3 className="text-sm font-bold text-lani-navy flex items-center gap-2 uppercase tracking-wider">
@@ -214,7 +313,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
             {activeTab === "objectives" && (
               <div className="space-y-4">
                 <h2 className="text-lg font-bold text-lani-navy tracking-tight mb-4">Key Learning Outcomes</h2>
-                <div className="grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   {course.outcomes.map((out) => (
                     <div key={out} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs font-semibold text-slate-700 hover:bg-white transition-all">
                       <ShieldCheck size={18} className="text-lani-green shrink-0" />
@@ -228,7 +327,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
             {activeTab === "audience" && (
               <div className="space-y-4">
                 <h2 className="text-lg font-bold text-lani-navy tracking-tight mb-4">Target Audience Profiles</h2>
-                <div className="grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   {course.audience.map((aud) => (
                     <div key={aud} className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs font-semibold text-slate-700 hover:bg-white transition-all">
                       <BookOpen size={18} className="text-lani-blue shrink-0" />
@@ -313,7 +412,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
         </div>
 
         {/* Right: Premium Checkout Widget */}
-        <div className="space-y-6">
+        <div className="space-y-6 self-start lg:sticky lg:top-24">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 shadow-md grid gap-6 text-left">
             <div>
               <span className="text-xs uppercase font-bold text-slate-400 tracking-wider">Tuition Fees</span>
@@ -388,6 +487,43 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
         </div>
 
       </div>
+
+      {/* Related Courses */}
+      {related.length > 0 && (
+        <div className="mt-16">
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-2xl font-extrabold tracking-tight text-lani-navy">Related Courses</h2>
+            <button onClick={onBack} className="text-xs font-bold text-lani-green hover:underline">View all courses</button>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {related.map((c) => (
+              <article
+                key={c.id}
+                onClick={() => onOpenRelated && onOpenRelated(c)}
+                className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg cursor-pointer"
+              >
+                <div className="relative h-40 overflow-hidden bg-slate-100">
+                  <img src={c.image} alt={c.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                  <span className="absolute left-3 top-3 rounded bg-white/95 px-2 py-0.5 text-[10px] font-bold text-lani-navy shadow uppercase">{c.status}</span>
+                </div>
+                <div className="p-5">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <span>{c.code}</span>
+                    <span className="text-lani-navy">{formatMoney(c.price)}</span>
+                  </div>
+                  <h3 className="mt-2 line-clamp-2 text-base font-bold leading-snug text-lani-navy group-hover:text-lani-green transition-colors">
+                    {c.title}
+                  </h3>
+                  <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                    <span className="flex items-center gap-1.5"><Clock size={13} className="text-lani-gold" />{c.duration}</span>
+                    <button className="btn-primary min-h-8 px-3 py-1 text-[10px]">Enrol Now</button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
 
       <AskAI
         open={askOpen}

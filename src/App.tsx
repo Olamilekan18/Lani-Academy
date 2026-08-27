@@ -1150,6 +1150,9 @@ export default function App() {
               canReview={enrollments.some((e) => e.courseId === selectedCourse.id && e.learnerEmail === (profile?.email || user?.email))}
               onSaveReview={handleSaveReview}
               onBack={() => { setSelectedCourse(null); navigate("/courses"); }}
+              relatedCourses={courses.filter((c) => c.id !== selectedCourse.id && (c.thematicArea === selectedCourse.thematicArea || c.category === selectedCourse.category))}
+              upcomingSessions={calendarEvents}
+              onOpenRelated={handleOpenCourse}
               onEnrol={() => {
                 if (!user) {
                   try { if (selectedCourse) sessionStorage.setItem("lani-pending-course", selectedCourse.id); } catch { /* ignore */ }
