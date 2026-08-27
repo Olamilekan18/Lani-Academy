@@ -1,5 +1,6 @@
 import React from "react";
 import { BookOpen, MapPin, Mail, Phone, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import LogoIcon from "./LogoIcon";
 import { dbSubscribeNewsletter } from "../lib/db";
@@ -151,13 +152,13 @@ export default function Footer({ onNavigate }: FooterProps) {
         <div className="mt-16 border-t border-white/10 pt-8 flex flex-col justify-between gap-4 md:flex-row text-xs text-slate-500 font-medium">
           <p>© {currentYear} LANI Group. All rights reserved. LANI Academy and its logo are trademarks of LANI Group.</p>
           <div className="flex gap-4">
-            <a href="#" className="hover:text-white transition-colors">
+            <Link to="/privacy" className="hover:text-white transition-colors">
               Privacy Policy
-            </a>
-            <a href="#" className="hover:text-white transition-colors">
+            </Link>
+            <Link to="/terms" className="hover:text-white transition-colors">
               Terms of Service
-            </a>
-            <a href="#" className="hover:text-white transition-colors flex items-center gap-1">
+            </Link>
+            <a href="https://lanigroup.com" className="hover:text-white transition-colors flex items-center gap-1">
               LANI Group Main
               <ExternalLink size={10} />
             </a>

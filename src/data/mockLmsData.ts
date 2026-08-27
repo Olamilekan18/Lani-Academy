@@ -674,7 +674,7 @@ export const mockCalendarEvents: CalendarEvent[] = [
     type: "Orientation",
     date: "2026-06-25",
     time: "9:00 AM WAT",
-    venue: "LANI Academy, Victoria Island, Lagos",
+    venue: "LANI Academy, 53b Adekunle Fajuyi Way, Ikeja GRA, Lagos",
   },
 ];
 

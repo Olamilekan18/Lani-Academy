@@ -20,6 +20,7 @@ import About from "./pages/About";
 import Certification from "./pages/Certification";
 import Resources from "./pages/Resources";
 import Contact from "./pages/Contact";
+import Legal from "./pages/Legal";
 import LearningCalendar from "./pages/LearningCalendar";
 import OrganizationDashboard from "./pages/OrganizationDashboard";
 import Pathways from "./pages/Pathways";
@@ -1194,6 +1195,8 @@ export default function App() {
         <Route path="/certification" element={<Certification onNavigate={navigateToView} />} />
         <Route path="/resources" element={<Resources onNavigate={navigateToView} content={content} />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/privacy" element={<Legal type="privacy" onNavigate={navigateToView} />} />
+        <Route path="/terms" element={<Legal type="terms" onNavigate={navigateToView} />} />
         <Route path="/calendar" element={
           <LearningCalendar
             courses={courses}
