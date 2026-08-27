@@ -10,7 +10,7 @@ export const BRAND_CFG = {
   logoUrl: "", // e.g. "https://yourdomain.com/logo.png" — falls back to wordmark when empty
   logoHeight: 34,
   colors: { brand: "#087443", emerald: "#10a768", navy: "#0f2442", gold: "#c9972b" },
-  address: "4 Olumuyiwa Street, Off Babington Ashaye Crescent, Omole Phase 1, Ikeja, Lagos, Nigeria",
+  address: "53b, Adekunle Fajuyi Way, Ikeja GRA, Lagos, Nigeria",
   email: "info@lani.ng",
   phone: "+234 (0) 800-LANI-ACADEMY",
   website: "https://lani.ng",

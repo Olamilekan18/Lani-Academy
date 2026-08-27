@@ -67,6 +67,8 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
   const [enrolCourseId, setEnrolCourseId] = useState("");
   const [isAssigning, setIsAssigning] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [learnerSearch, setLearnerSearch] = useState("");
+  const [paymentSearch, setPaymentSearch] = useState("");
 
   const [alertsOpen, setAlertsOpen] = useState(false);
   const alertsRef = useRef<HTMLDivElement>(null);
@@ -729,6 +731,16 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
       {/* LEARNERS */}
       {tab === "learners" && (
         <div>
+          {/* Search bar */}
+          <div className="mb-5 relative max-w-md">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+            <input
+              value={learnerSearch}
+              onChange={e => setLearnerSearch(e.target.value)}
+              placeholder="Search by name or email..."
+              className="w-full rounded-lg border border-slate-200 pl-9 pr-4 py-2.5 text-sm outline-none focus:border-lani-blue focus:ring-2 focus:ring-lani-blue/10 transition-all"
+            />
+          </div>
           {/* Facilitators management */}
           <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
             <div className="mb-3 flex items-center gap-2">
@@ -738,7 +750,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
             </div>
             {facilitators.length > 0 ? (
               <div className="grid gap-2 sm:grid-cols-2">
-                {facilitators.map(f => (
+                {facilitators.filter(f => { const q = learnerSearch.toLowerCase(); return !q || f.fullName.toLowerCase().includes(q) || f.email.toLowerCase().includes(q); }).map(f => (
                   <div key={f.email} className="flex items-center justify-between gap-3 rounded-lg border border-slate-150 bg-slate-50 px-3 py-2.5">
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-lani-navy truncate">{f.fullName}</p>
@@ -765,7 +777,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
           <table>
             <thead><tr><th>Learner</th><th>Course</th><th>Progress</th><th>Payment</th><th>Enrolled</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {enrollments.map(e => {
+              {enrollments.filter(e => { const q = learnerSearch.toLowerCase(); return !q || e.learnerName.toLowerCase().includes(q) || e.learnerEmail.toLowerCase().includes(q); }).map(e => {
                 const c = courses.find(x => x.id===e.courseId);
                 return (
                   <tr key={e.id}>
@@ -794,7 +806,16 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
       {/* PAYMENTS */}
       {tab === "payments" && (
         <div>
-          <div className="mb-4 flex items-center gap-3">
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+              <input
+                value={paymentSearch}
+                onChange={e => setPaymentSearch(e.target.value)}
+                placeholder="Search by name, email, or receipt..."
+                className="w-full rounded-lg border border-slate-200 pl-9 pr-4 py-2.5 text-sm outline-none focus:border-lani-blue focus:ring-2 focus:ring-lani-blue/10 transition-all"
+              />
+            </div>
             <span className="text-xs font-bold text-slate-500">Total Revenue: <span className="text-lani-navy text-sm">{formatMoney(totalRevenue)}</span></span>
             <button className="ml-auto btn-secondary min-h-9 px-3 text-xs gap-1" onClick={() => exportCsv("lani-transactions.csv", transactions.map(t => ({ receipt:t.receiptNumber, learner:t.learnerEmail, amount:t.amount, gateway:t.gateway, status:t.status, date:t.createdAt, depositor: t.depositorName || "", bank: t.sourceBank || "", ref: t.transferReference || "" })))}><Download size={13}/>Export CSV</button>
           </div>
@@ -802,7 +823,7 @@ export default function AdminDashboard({ courses, enrollments, transactions, cer
             <table>
               <thead><tr><th>Receipt</th><th>Learner</th><th>Amount</th><th>Gateway</th><th>Transfer Proof</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
-                {transactions.map(t => (
+                {transactions.filter(t => { const q = paymentSearch.toLowerCase(); return !q || t.learnerEmail.toLowerCase().includes(q) || (t.depositorName || "").toLowerCase().includes(q) || t.receiptNumber.toLowerCase().includes(q); }).map(t => (
                   <tr key={t.id}>
                     <td><strong>{t.receiptNumber}</strong><span>{t.id}</span></td>
                     <td className="text-xs">{t.learnerEmail}</td>

@@ -70,8 +70,8 @@ export default function Contact() {
                 <div>
                   <h3 className="text-sm font-bold text-lani-navy">Head Office</h3>
                   <p className="mt-1 text-xs leading-6 text-slate-500">
-                    4, Olumuyiwa Street, Off Babington Ashaye Crescent,<br />
-                    Omole Phase 1, Ikeja, Lagos, Nigeria.
+                    53b, Adekunle Fajuyi Way,<br />
+                    Ikeja GRA, Lagos, Nigeria.
                   </p>
                 </div>
               </div>

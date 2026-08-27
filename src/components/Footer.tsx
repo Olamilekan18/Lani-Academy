@@ -91,11 +91,9 @@ export default function Footer({ onNavigate }: FooterProps) {
               <li className="flex gap-3">
                 <MapPin size={18} className="text-lani-gold shrink-0 mt-1" />
                 <span>
-                  4, Olumuyiwa Street,
+                  53b, Adekunle Fajuyi Way,
                   <br />
-                  Off Babington Ashaye Crescent,
-                  <br />
-                  Omole Phase 1, Ikeja, Lagos, Nigeria.
+                  Ikeja GRA, Lagos, Nigeria.
                 </span>
               </li>
               <li className="flex gap-3 items-center">
