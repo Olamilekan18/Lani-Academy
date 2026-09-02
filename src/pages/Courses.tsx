@@ -49,7 +49,7 @@ export default function Courses({
     "Hybrid",
     "In-plant",
   ];
-  const skillLevels = ["All Skill Levels", "Foundation", "Intermediate", "Advanced", "Executive"];
+  const skillLevels = ["All Skill Levels", "Foundation", "Intermediate", "Advanced", "Executive", "PT1", "PT2", "Others"];
 
   // Filtering Logic
   const filteredCourses = courses.filter((course) => {

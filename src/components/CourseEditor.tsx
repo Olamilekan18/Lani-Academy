@@ -30,8 +30,8 @@ const pickVideo = (file: File | null, apply: (f: File | null) => void) => {
 
 const STATUSES: CourseStatus[] = ["Open", "Coming Soon", "Application Required", "Corporate Only", "Sold Out", "Archived"];
 const DELIVERY: DeliveryMode[] = ["Self-paced", "Instructor-led", "Virtual", "Physical", "Hybrid", "In-plant"];
-const TYPES: Course["type"][] = ["Open Programme", "Certification Prep", "Bootcamp", "Corporate", "Sponsored"];
-const LEVELS: Course["level"][] = ["Foundation", "Intermediate", "Advanced", "Executive"];
+const TYPES: Course["type"][] = ["Open Programme", "Certification Preparatory Class", "Bootcamp", "Corporate", "Sponsored"];
+const LEVELS: Course["level"][] = ["Foundation", "Intermediate", "Advanced", "Executive", "PT1", "PT2", "Others"];
 
 export default function CourseEditor({ initial, thematicAreas, facilitators, onSave, onAssign, onCancel }: CourseEditorProps) {
   const [facilitatorEmail, setFacilitatorEmail] = useState(
@@ -71,6 +71,7 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
   const [materialFiles, setMaterialFiles] = useState(initial?.materialFiles || []);
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [courseVideoFile, setCourseVideoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   const set = (k: keyof typeof f, v: any) => setF((p) => ({ ...p, [k]: v }));
@@ -104,6 +105,11 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
       // Uploads
       let image = f.image;
       if (coverFile) image = (await dbUploadFile(coverFile, "courses")) || image;
+      let videoUrl = f.videoUrl.trim();
+      if (courseVideoFile) {
+        const url = await dbUploadFile(courseVideoFile, "videos", ["video/*"], MAX_VIDEO_BYTES);
+        if (url) videoUrl = url;
+      }
       const uploaded = [...materialFiles];
       for (const file of newFiles) {
         const url = await dbUploadFile(file, "materials");
@@ -171,7 +177,7 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
         seats: Number(f.seats) || 0,
         enrolled: initial?.enrolled ?? 0,
         image: image || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80",
-        videoUrl: f.videoUrl || undefined,
+        videoUrl: videoUrl || undefined,
         sequential: f.sequential,
         materialFiles: uploaded,
         certification: f.certification,
@@ -267,6 +273,11 @@ export default function CourseEditor({ initial, thematicAreas, facilitators, onS
           <label className="form-field">Cover image URL<input value={f.image} onChange={(e) => set("image", e.target.value)} placeholder="https://... (or upload below)" /></label>
           <label className="form-field">Upload cover image<input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] || null)} /></label>
           <label className="form-field sm:col-span-2">Course-wide video URL <span className="font-normal text-slate-400">(fallback for lessons without their own)</span><input value={f.videoUrl} onChange={(e) => set("videoUrl", e.target.value)} placeholder="YouTube, Vimeo, or direct .mp4" /></label>
+          <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500"><Video size={12} className="text-lani-green" /> Upload course video (optional)</span>
+            <input type="file" accept="video/*" onChange={(e) => pickVideo(e.target.files?.[0] || null, (fl) => setCourseVideoFile(fl))} className="mt-1.5 block w-full text-[10px] file:mr-2 file:rounded file:border-0 file:bg-lani-mist file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-lani-green" />
+            <span className="mt-1 block text-[10px] text-slate-400">{courseVideoFile ? `Selected: ${courseVideoFile.name}` : `Upload a video (max ${MAX_VIDEO_MB}MB) or paste a link above.`}</span>
+          </div>
           <label className="sm:col-span-2 flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
             <input type="checkbox" checked={f.sequential} onChange={(e) => set("sequential", e.target.checked)} className="mt-0.5 h-4 w-4 accent-lani-green" />
             <span>

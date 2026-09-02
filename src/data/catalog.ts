@@ -184,7 +184,7 @@ const baseCourses: Course[] = [
     code: "LANI-TAX-305",
     category: "Certification Preparation",
     thematicArea: "Finance, Tax and Compliance",
-    type: "Certification Prep",
+    type: "Certification Preparatory Class",
     level: "Intermediate",
     deliveryModes: ["Virtual", "Physical"],
     duration: "8 weeks",
@@ -532,7 +532,7 @@ export const applicationProgrammes = [
     required: "Organisation, department, staff ID, nominated by, and approval status",
   },
   {
-    type: "Certification Prep",
+    type: "Certification Preparatory Class",
     title: "Certification preparation",
     required: "Professional body level, exam attempts, and preferred subject papers",
   },
@@ -673,7 +673,7 @@ export const initialApplications: ProgrammeApplication[] = [
   },
   {
     id: "app-002",
-    programmeType: "Certification Prep",
+    programmeType: "Certification Preparatory Class",
     applicantName: "Mariam Bello",
     email: "mariam.bello@example.com",
     phone: "+234 800 777 9898",

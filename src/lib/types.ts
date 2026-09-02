@@ -68,8 +68,8 @@ export type Course = {
   code: string;
   category: string;
   thematicArea: string;
-  type: "Open Programme" | "Certification Prep" | "Bootcamp" | "Corporate" | "Sponsored";
-  level: "Foundation" | "Intermediate" | "Advanced" | "Executive";
+  type: "Open Programme" | "Certification Preparatory Class" | "Bootcamp" | "Corporate" | "Sponsored";
+  level: "Foundation" | "Intermediate" | "Advanced" | "Executive" | "PT1" | "PT2" | "Others";
   deliveryModes: DeliveryMode[];
   duration: string;
   price: number;
