@@ -86,7 +86,7 @@ export default function Contact() {
                 <div className="feature-icon"><Phone size={20} /></div>
                 <div>
                   <h3 className="text-sm font-bold text-lani-navy">Phone</h3>
-                  <a href="tel:+2348000000000" className="mt-1 block text-xs font-semibold text-lani-green">+234 (0) 800-LANI-ACADEMY</a>
+                  <a href="tel:+2347053339191" className="mt-1 block text-xs font-semibold text-lani-green">+234 705 333 9191</a>
                 </div>
               </div>
               <div className="info-card flex items-start gap-4">

@@ -12,7 +12,7 @@ export const BRAND_CFG = {
   colors: { brand: "#087443", emerald: "#10a768", navy: "#0f2442", gold: "#c9972b" },
   address: "53b, Adekunle Fajuyi Way, Ikeja GRA, Lagos, Nigeria",
   email: "info@lani.ng",
-  phone: "+234 (0) 800-LANI-ACADEMY",
+  phone: "+234 705 333 9191",
   website: "https://lani.ng",
   social: [
     { label: "Website", url: "https://lani.ng" },

@@ -105,8 +105,8 @@ export default function Footer({ onNavigate }: FooterProps) {
               </li>
               <li className="flex gap-3 items-center">
                 <Phone size={16} className="text-lani-gold shrink-0" />
-                <a href="tel:+2348000000000" className="hover:text-white transition-colors">
-                  +234 (0) 800-LANI-ACADEMY
+                <a href="tel:+2347053339191" className="hover:text-white transition-colors">
+                  +234 705 333 9191
                 </a>
               </li>
             </ul>
