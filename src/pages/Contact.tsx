@@ -70,7 +70,7 @@ export default function Contact() {
                 <div>
                   <h3 className="text-sm font-bold text-lani-navy">Head Office</h3>
                   <p className="mt-1 text-xs leading-6 text-slate-500">
-                    53b, Adekunle Fajuyi Way,<br />
+                    53B, Adekunle Fajuyi Way,<br />
                     Ikeja GRA, Lagos, Nigeria.
                   </p>
                 </div>

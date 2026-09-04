@@ -1,0 +1,8 @@
+# robots.txt — LANI Academy
+# https://academy.lani.ng
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://academy.lani.ng/sitemap.xml
