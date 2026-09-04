@@ -57,10 +57,10 @@ const ROLE_META: Record<PortalRole, RoleMeta> = {
     selfServe: true,
   },
   organization: {
-    label: "Organization",
+    label: "Organisation",
     title: "Upskill your team with LANI Academy",
     tagline:
-      "Register your organization to sponsor learners, manage seats, and track your team's development.",
+      "Register your organisation to sponsor learners, manage seats, and track your team's development.",
     benefits: [
       "Sponsor and enrol your team",
       "Manage seats and bulk enrolments",

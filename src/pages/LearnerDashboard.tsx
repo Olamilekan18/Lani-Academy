@@ -445,7 +445,7 @@ export default function LearnerDashboard({ enrollments, courses, certificates, t
           )) : (
             <div className="py-20 text-center border border-slate-200 rounded-2xl bg-slate-50/50">
               <BookOpen className="mx-auto text-slate-300" size={44}/>
-              <h3 className="mt-4 text-base font-bold text-lani-navy">No Active Enrollments</h3>
+              <h3 className="mt-4 text-base font-bold text-lani-navy">No Active Enrolments</h3>
               <p className="mt-1 text-xs text-slate-500">Browse the course catalogue to get started.</p>
             </div>
           )}

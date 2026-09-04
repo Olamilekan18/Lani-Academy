@@ -183,7 +183,7 @@ export const mockLeads: CorporateLead[] = [
     participants: 50,
     deliveryMode: "In-plant",
     preferredDate: "2026-08-01",
-    need: "Digital transformation capability program for branch managers and product teams.",
+    need: "Digital transformation capability programme for branch managers and product teams.",
     stage: "New",
     createdAt: "2026-06-14",
   },
@@ -230,7 +230,7 @@ export const mockApplications: ProgrammeApplication[] = [
     location: "Kano, Nigeria",
     organisation: "GreenFields Agro Ltd",
     motivation:
-      "Our startup focuses on poultry value chain optimization. We need structured mentorship and market access support to scale from 5,000 to 50,000 birds capacity.",
+      "Our startup focuses on poultry value chain optimisation. We need structured mentorship and market access support to scale from 5,000 to 50,000 birds capacity.",
     status: "Shortlisted",
     score: 85,
     createdAt: "2026-06-02",
@@ -507,7 +507,7 @@ export const mockAssignments: Assignment[] = [
     courseTitle: "Digital Transformation Officer Pathway",
     title: "Digital Strategy Case Study Analysis",
     description:
-      "Analyze the provided case study of a Nigerian bank's digital transformation journey. Identify key success factors, challenges, and propose a 12-month roadmap for a similar institution.",
+      "Analyse the provided case study of a Nigerian bank's digital transformation journey. Identify key success factors, challenges, and propose a 12-month roadmap for a similar institution.",
     dueDate: "2026-07-15",
     dueTime: "23:59",
     maxScore: 100,
@@ -708,7 +708,7 @@ export const mockNotifications: Notification[] = [
   {
     id: "notif-004",
     type: "enrollment",
-    title: "Enrollment Confirmed",
+    title: "Enrolment Confirmed",
     body: "You have been enrolled in Agribusiness Enterprise Development.",
     read: true,
     createdAt: "2026-06-10T09:00:00",

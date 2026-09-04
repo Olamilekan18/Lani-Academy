@@ -31,7 +31,7 @@ export default function Footer({ onNavigate }: FooterProps) {
               </div>
             </div>
             <p className="text-sm leading-6 text-slate-400">
-              Transforming capabilities and driving organizational excellence through our hybrid
+              Transforming capabilities and driving organisational excellence through our hybrid
               capacity building engine. Leading in open programmes, bespoke training, and digital
               LMS deployment.
             </p>
@@ -45,7 +45,7 @@ export default function Footer({ onNavigate }: FooterProps) {
 
           {/* Core Portals */}
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-wider text-white">Programs & Portals</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-white">Programmes & Portals</h3>
             <ul className="mt-6 space-y-4">
               {([
                 { label: "Course Marketplace", view: "courses" },

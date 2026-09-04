@@ -222,7 +222,7 @@ export default function CourseDetail({ course, reviews = [], currentUserEmail = 
                   </div>
                 </div>
 
-                <h2 className="text-lg font-bold text-lani-navy tracking-tight">Program Focus & Context</h2>
+                <h2 className="text-lg font-bold text-lani-navy tracking-tight">Programme Focus & Context</h2>
                 <p className="text-sm leading-7">{course.fullDescription}</p>
 
                 {course.outcomes.length > 0 && (

@@ -70,7 +70,7 @@ export default function Applications() {
         {/* Left: Eligibility info */}
         <div className="space-y-8">
           <div>
-            <h2 className="text-xl font-bold text-lani-navy tracking-tight">Active Sponsored Programs</h2>
+            <h2 className="text-xl font-bold text-lani-navy tracking-tight">Active Sponsored Programmes</h2>
             <p className="mt-2 text-xs leading-6 text-slate-500">
               Select which cohort you qualify for in the application form.
             </p>
@@ -80,7 +80,7 @@ export default function Applications() {
             {[
               {
                 title: "Development Sector Capacity Grant",
-                target: "NGO managers, public sector administrators, community organizers.",
+                target: "NGO managers, public sector administrators, community organisers.",
                 focus: "Monitoring & Evaluation, ESG framework compliance."
               },
               {

@@ -98,7 +98,7 @@ export default function SignUp() {
             )}
           </div>
 
-          {/* Organization Option */}
+          {/* Organisation Option */}
           <button
             onClick={() => navigate("/signup/organization")}
             className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 bg-white hover:border-lani-green hover:shadow-md transition-all group"
@@ -108,7 +108,7 @@ export default function SignUp() {
                 <Building2 size={20} />
               </div>
               <div className="text-left">
-                <h3 className="text-sm font-bold text-lani-navy">Sign up as Organization</h3>
+                <h3 className="text-sm font-bold text-lani-navy">Sign up as Organisation</h3>
                 <p className="text-[11px] text-slate-500">Sponsor and track learners from your company</p>
               </div>
             </div>

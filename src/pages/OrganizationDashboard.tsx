@@ -42,7 +42,7 @@ export default function OrganizationDashboard({ courses }: Props) {
   const [proposalDate, setProposalDate] = useState("");
   const [proposalNeed, setProposalNeed] = useState("");
 
-  const orgName = profile?.organisation || "Organization";
+  const orgName = profile?.organisation || "Organisation";
 
   const loadLearners = async () => {
     if (!supabase || !orgName) return;
@@ -273,7 +273,7 @@ export default function OrganizationDashboard({ courses }: Props) {
             <BookOpen size={22} />
           </div>
           <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Active Enrollments</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Active Enrolments</span>
             <span className="text-xl font-bold text-lani-navy">
               {sponsoredLearners.filter((l) => l.progress < 100).length}
             </span>
@@ -285,7 +285,7 @@ export default function OrganizationDashboard({ courses }: Props) {
             <CheckCircle size={22} />
           </div>
           <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Completed Programs</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Completed Programmes</span>
             <span className="text-xl font-bold text-lani-navy">
               {sponsoredLearners.filter((l) => l.progress === 100).length}
             </span>
@@ -343,7 +343,7 @@ export default function OrganizationDashboard({ courses }: Props) {
                   <thead>
                     <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 uppercase font-bold text-[10px] tracking-wider">
                       <th className="p-4">Name / Email</th>
-                      <th className="p-4">Program</th>
+                      <th className="p-4">Programme</th>
                       <th className="p-4 text-center">Progress</th>
                       <th className="p-4 text-center">Status</th>
                       <th className="p-4 text-right">Enrolled At</th>

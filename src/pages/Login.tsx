@@ -272,7 +272,7 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
               {portalRole === "organization" && (
                 <>
                   <label className="form-field">
-                    Organization Name
+                    Organisation Name
                     <input
                       type="text"
                       required
@@ -282,7 +282,7 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
                     />
                   </label>
                   <label className="form-field">
-                    Job Title / Role in Organization
+                    Job Title / Role in Organisation
                     <input
                       type="text"
                       required
