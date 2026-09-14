@@ -24,6 +24,7 @@ import Legal from "./pages/Legal";
 import LearningCalendar from "./pages/LearningCalendar";
 import OrganizationDashboard from "./pages/OrganizationDashboard";
 import Pathways from "./pages/Pathways";
+import IncubationHub from "./pages/IncubationHub";
 
 import LoadingScreen from "./components/LoadingScreen";
 import TwoFactorModal from "./components/TwoFactorModal";
@@ -1216,6 +1217,8 @@ export default function App() {
             onNavigate={navigateToView}
           />
         } />
+
+        <Route path="/incubation" element={<IncubationHub onNavigate={navigateToView} />} />
 
         <Route path="/learn" element={guardDashboard(["learner"], "learner",
           <LearnerDashboard

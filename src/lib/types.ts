@@ -16,7 +16,8 @@ export type View =
   | "contact"
   | "calendar"
   | "profile"
-  | "pathways";
+  | "pathways"
+  | "incubation";
 
 export type DeliveryMode =
   | "Self-paced"

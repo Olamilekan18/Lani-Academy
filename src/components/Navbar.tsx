@@ -12,6 +12,7 @@ import {
   GraduationCap,
   Building2,
   User as UserIcon,
+  Rocket,
 } from "lucide-react";
 import type { View } from "../lib/types";
 
@@ -53,6 +54,7 @@ export default function Navbar({ currentView, onNavigate }: NavbarProps) {
     { label: "Calendar", view: "calendar" },
     { label: "B2B Training", view: "corporate" },
     { label: "Scholarships", view: "applications" },
+    { label: "Incubation Hub", view: "incubation" },
     { label: "Resources", view: "resources" },
     { label: "About", view: "about" },
   ];
