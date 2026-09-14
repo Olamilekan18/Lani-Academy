@@ -9,6 +9,12 @@ import {
   Star,
   ShieldCheck,
   Quote,
+  Rocket,
+  Lightbulb,
+  Users,
+  Target,
+  BarChart3,
+  Zap,
 } from "lucide-react";
 import type { Course, ThematicArea, Sme } from "../lib/types";
 import { formatMoney } from "../lib/utils";
@@ -217,6 +223,76 @@ export default function Home({ courses, thematicAreas, onNavigate, onOpenCourse,
           {MODES.map((m) => (
             <span key={m} className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-semibold text-slate-600">{m}</span>
           ))}
+        </div>
+      </section>
+
+      {/* ── TECH INCUBATION HUB ───────────────────────────── */}
+      <section className="section bg-gradient-to-br from-lani-navy/5 via-white to-lani-emerald/5">
+        <div className="page-header text-center">
+          <span className="eyebrow">Tech Incubation Hub</span>
+          <h2 className="mt-3 section-title">Launch. Scale. Succeed.</h2>
+          <p className="lead mx-auto mt-2 max-w-2xl">
+            A dedicated ecosystem for early-stage tech founders — from idea validation to investor-ready ventures. 
+            Access mentorship, capital networks, technical resources, and a community of builders shaping Africa's digital future.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-8 md:grid-cols-3">
+          {[
+            { icon: Rocket, title: "Acceleration Programme", desc: "12-week structured sprint covering product-market fit, go-to-market strategy, unit economics, and fundraising readiness. Cohort-based with weekly milestones." },
+            { icon: Lightbulb, title: "Expert Mentorship", desc: "1:1 guidance from seasoned founders, operators, and domain experts across fintech, healthtech, edtech, agritech, and climate tech." },
+            { icon: Users, title: "Investor Access", desc: "Curated introductions to angel networks, VCs, and corporate VCs. Demo Day showcase to 100+ investors with live pitch sessions and follow-up meetings." },
+            { icon: Target, title: "Technical Resources", desc: "Cloud credits (AWS/Azure/GCP), dev tools, design systems, and access to LANI's engineering talent pool for MVP development and scaling." },
+            { icon: BarChart3, title: "Growth Support", desc: "Post-programme support including customer acquisition playbooks, hiring pipelines, legal templates, and quarterly founder retreats." },
+            { icon: Zap, title: "Community & Network", desc: "Lifetime access to the alumni network, monthly founder forums, peer learning circles, and exclusive partnership perks from ecosystem partners." },
+          ].map((item, i) => (
+            <article key={item.title} className="group relative rounded-2xl border border-slate-100 bg-white p-7 shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-soft hover:border-lani-green/30">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-lani-green/10 text-lani-green ring-1 ring-lani-green/10 group-hover:bg-lani-green group-hover:text-white transition-all">
+                <item.icon size={24} />
+              </div>
+              <h3 className="mt-5 text-lg font-bold text-lani-navy group-hover:text-lani-green transition-colors">{item.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-500">{item.desc}</p>
+            </article>
+          ))}
+        </div>
+
+        {/* Program Tracks */}
+        <div className="mt-16">
+          <h3 className="text-center text-xl font-bold text-lani-navy">Incubation Tracks</h3>
+          <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {[
+              { name: "Pre-Seed Launchpad", stage: "Idea → MVP", duration: "8 weeks", focus: "Validation, prototyping, first users", color: "bg-lani-blue" },
+              { name: "Seed Accelerator", stage: "MVP → Traction", duration: "12 weeks", focus: "Growth, metrics, fundraising prep", color: "bg-lani-green" },
+              { name: "Scale Programme", stage: "Traction → Series A", duration: "16 weeks", focus: "Scaling, org building, expansion", color: "bg-lani-gold" },
+              { name: "Corporate Innovation", stage: "Intrapreneurship", duration: "Custom", focus: "Venture building within enterprises", color: "bg-cyan-600" },
+            ].map((track, i) => (
+              <article key={track.name} className="group rounded-2xl border border-slate-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-soft">
+                <div className="flex items-center justify-between">
+                  <span className={`inline-flex h-2.5 w-10 rounded-full ${track.color}`} />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{track.duration}</span>
+                </div>
+                <h4 className="mt-4 text-base font-bold text-lani-navy group-hover:text-lani-green transition-colors">{track.name}</h4>
+                <p className="mt-1.5 text-xs font-semibold text-lani-green">{track.stage}</p>
+                <p className="mt-2 text-sm leading-5 text-slate-500">{track.focus}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div className="mt-16 text-center">
+          <div className="mx-auto max-w-xl rounded-2xl bg-lani-navy p-8 text-white">
+            <h3 className="text-2xl font-extrabold tracking-tight">Applications open for Cohort 4</h3>
+            <p className="mt-3 text-white/80">Limited to 15 ventures per cohort. Deadline: <span className="font-bold text-lani-gold">31 October 2026</span></p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <button onClick={() => onNavigate("applications")} className="btn-primary min-h-12 px-6 text-sm">
+                Apply Now <ArrowRight size={16} />
+              </button>
+              <button onClick={() => onNavigate("contact")} className="rounded-lg border border-white/40 bg-white/10 px-6 py-3 text-sm font-bold text-white transition-all hover:bg-white/20 min-h-12">
+                Partner With Us
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
