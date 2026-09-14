@@ -454,6 +454,7 @@ export default function App() {
     else if (view === "contact") navigate("/contact");
     else if (view === "calendar") navigate("/calendar");
     else if (view === "pathways") navigate("/pathways");
+    else if (view === "incubation") navigate("/incubation");
     else if (view === "profile") navigate("/learn?tab=profile");
   };
 
@@ -1037,6 +1038,7 @@ export default function App() {
     if (path.startsWith("/contact")) return "contact";
     if (path.startsWith("/calendar")) return "calendar";
     if (path.startsWith("/pathways")) return "pathways";
+    if (path.startsWith("/incubation")) return "incubation";
     return "home";
   };
 
