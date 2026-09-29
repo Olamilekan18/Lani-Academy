@@ -50,17 +50,35 @@ declare global {
   }
 }
 
-// Loads an external script once and resolves when ready.
-function loadScript(src: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve(true);
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
+// Share in-flight script loads so clicking Pay during preload waits for the
+// actual load event instead of mistaking an existing <script> tag for a ready
+// gateway SDK.
+const scriptLoads = new Map<string, Promise<boolean>>();
+
+function loadScript(src: string, isReady: () => boolean): Promise<boolean> {
+  if (isReady()) return Promise.resolve(true);
+  const inFlight = scriptLoads.get(src);
+  if (inFlight) return inFlight;
+
+  const promise = new Promise<boolean>((resolve) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`);
+    const script = existing || document.createElement("script");
+    const finish = (loaded: boolean) => {
+      const ready = loaded && isReady();
+      if (!ready) scriptLoads.delete(src);
+      resolve(ready);
+    };
+
+    script.addEventListener("load", () => finish(true), { once: true });
+    script.addEventListener("error", () => finish(false), { once: true });
+    if (!existing) {
+      script.src = src;
+      script.async = true;
+      document.body.appendChild(script);
+    }
   });
+  scriptLoads.set(src, promise);
+  return promise;
 }
 
 export default function CheckoutModal({
@@ -113,8 +131,10 @@ export default function CheckoutModal({
 
   // Preload gateway scripts as soon as the modal opens.
   useEffect(() => {
-    loadScript("https://js.paystack.co/v2/inline.js");
-    if (FLUTTERWAVE_KEY) loadScript("https://checkout.flutterwave.com/v3.js");
+    void loadScript("https://js.paystack.co/v2/inline.js", () => Boolean(window.PaystackPop));
+    if (FLUTTERWAVE_KEY) {
+      void loadScript("https://checkout.flutterwave.com/v3.js", () => Boolean(window.FlutterwaveCheckout));
+    }
   }, []);
 
   const handleSubmitInfo = (e: React.FormEvent) => {
@@ -181,7 +201,7 @@ export default function CheckoutModal({
       return;
     }
 
-    const ok = await loadScript("https://js.paystack.co/v2/inline.js");
+    const ok = await loadScript("https://js.paystack.co/v2/inline.js", () => Boolean(window.PaystackPop));
     if (!ok || !window.PaystackPop) {
       setLoading(false);
       setError("Could not reach Paystack. Check your connection and try again.");
@@ -203,7 +223,7 @@ export default function CheckoutModal({
   // ── Real Flutterwave inline checkout ─────────────────────────
   const payWithFlutterwave = async () => {
     setError("");
-    const ok = await loadScript("https://checkout.flutterwave.com/v3.js");
+    const ok = await loadScript("https://checkout.flutterwave.com/v3.js", () => Boolean(window.FlutterwaveCheckout));
     if (!ok || !window.FlutterwaveCheckout) {
       setError("Could not reach Flutterwave. Check your connection and try again.");
       return;

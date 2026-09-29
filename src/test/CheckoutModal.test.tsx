@@ -64,6 +64,11 @@ describe("CheckoutModal Component (src/components/CheckoutModal.tsx)", () => {
   afterEach(() => {
     paymentMocks.initialize.mockReset();
     delete window.PaystackPop;
+    document.querySelectorAll<HTMLScriptElement>('script[src="https://js.paystack.co/v2/inline.js"]')
+      .forEach((script) => {
+        script.dispatchEvent(new Event("error"));
+        script.remove();
+      });
   });
 
   it("renders course details and total price initially", () => {
@@ -109,11 +114,8 @@ describe("CheckoutModal Component (src/components/CheckoutModal.tsx)", () => {
     expect(screen.getByPlaceholderText("e.g. GTBank, First Bank")).toBeInTheDocument();
   });
 
-  it("initializes Paystack on the server and resumes the v2 popup", async () => {
+  it("waits for an in-flight Paystack preload before resuming the v2 popup", async () => {
     const resumeTransaction = vi.fn().mockResolvedValue(undefined);
-    window.PaystackPop = class {
-      resumeTransaction = resumeTransaction;
-    };
     paymentMocks.initialize.mockResolvedValue({
       ok: true,
       accessCode: "access_test_123",
@@ -125,8 +127,15 @@ describe("CheckoutModal Component (src/components/CheckoutModal.tsx)", () => {
     fireEvent.click(screen.getByText("Continue"));
     fireEvent.click(screen.getByRole("button", { name: "Pay ₦250,000" }));
 
+    await waitFor(() => expect(paymentMocks.initialize).toHaveBeenCalledWith("course-1", undefined));
+    const script = document.querySelector<HTMLScriptElement>('script[src="https://js.paystack.co/v2/inline.js"]');
+    expect(script).not.toBeNull();
+    window.PaystackPop = class {
+      resumeTransaction = resumeTransaction;
+    };
+    script!.dispatchEvent(new Event("load"));
+
     await waitFor(() => {
-      expect(paymentMocks.initialize).toHaveBeenCalledWith("course-1", undefined);
       expect(resumeTransaction).toHaveBeenCalledWith(
         "access_test_123",
         expect.objectContaining({
