@@ -178,7 +178,7 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="grid gap-4">
+        <form onSubmit={handleSubmit} autoComplete="off" className="grid gap-4">
           {mode === "signup" && (
             <>
               <label className="form-field">
@@ -388,7 +388,8 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@company.com"
+              placeholder="e.g. your.email@example.com"
+              autoComplete="off"
             />
           </label>
 
@@ -401,7 +402,8 @@ export default function Login({ portalRole, onSuccess, onNavigate, forceSignup, 
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="e.g. YourSecurePassword123!"
+                  autoComplete="new-password"
                   className="w-full pr-10"
                 />
                 <button
