@@ -49,8 +49,9 @@ serve(async (req) => {
   if (!reference) return json({ verified: false, configured: true, reason: "Missing reference" }, 400, origin);
 
   try {
-    const result = await verifyPayment(gateway, reference, expectedAmount);
-    return json(result, 200, origin);
+    const result = await verifyPayment(gateway, reference, { amount: expectedAmount });
+    const { verified, configured, amount, currency, status, reason } = result;
+    return json({ verified, configured, amount, currency, status, reason }, 200, origin);
   } catch (e) {
     return json({ verified: false, configured: true, reason: String(e) }, 500, origin);
   }

@@ -1,0 +1,5 @@
+[functions.paystack-webhook]
+# Paystack cannot send a Supabase user JWT. This one function is intentionally
+# public at the gateway and authenticates every request with Paystack's
+# x-paystack-signature HMAC-SHA512 header before processing it.
+verify_jwt = false

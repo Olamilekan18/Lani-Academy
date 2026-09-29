@@ -33,7 +33,7 @@ Design principles: **commercial‑first, learner‑friendly, corporate‑ready, 
 | Toasts | react-hot-toast |
 | Backend-as-a-Service | Supabase (Postgres 15, GoTrue Auth, Storage, Edge Functions/Deno) |
 | Auth | Supabase Auth (email/password) + optional email 2FA |
-| Payments | Paystack + Flutterwave (client inline), bank transfer (manual) |
+| Payments | Paystack (server-initialized InlineJS v2), Flutterwave, bank transfer (manual) |
 | Email | Resend (via Supabase Edge Function) |
 | Scheduling | Supabase `pg_cron` + `pg_net` |
 | Analytics | Google Analytics 4 + Microsoft Clarity (optional) |
@@ -93,12 +93,13 @@ flowchart TB
 | Supabase Postgres | Client ⇄ DB | `@supabase/supabase-js` (REST/Realtime), RLS enforced | anon key (client, safe) |
 | Supabase Auth | Client ⇄ Auth | email/password, JWT session | anon key |
 | Supabase Storage | Client ⇄ Storage | `media` public bucket, `dbUploadFile()` | anon key + RLS |
-| Paystack / Flutterwave | Client → Gateway | inline JS popup, public key | public key (client, safe) |
+| Paystack | Client → Edge Function → Gateway | server initialization + InlineJS v2 access code | secret key (server only) |
+| Flutterwave | Client → Gateway | inline JS popup | public key (client, safe) |
 | Resend (email) | Edge Fn → Resend | `send-email` function wraps Resend REST | `RESEND_API_KEY` (function secret) |
 | Class reminders | pg_cron → Edge Fn → Resend | daily `pg_net` HTTP POST | service role + Resend key |
 | Analytics | Client → GA4/Clarity | script injected at boot if env set | measurement IDs (client) |
 
-Every integration **degrades gracefully**: no payment key → demo checkout; no Resend key → emails are recorded/skipped, never blocking; no analytics IDs → no scripts loaded; no Supabase → connection‑error screen with offline mode.
+Every non-payment integration **degrades gracefully**: no Resend key → emails are recorded/skipped, never blocking; no analytics IDs → no scripts loaded; no Supabase → connection-error screen with offline mode. Paystack deliberately fails closed when its server secret is absent.
 
 ---
 
@@ -285,7 +286,7 @@ Client (`.env`, all `VITE_*`):
 
 ```
 VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY        # required
-VITE_PAYSTACK_PUBLIC_KEY, VITE_FLUTTERWAVE_PUBLIC_KEY  # optional (demo mode if absent)
+VITE_FLUTTERWAVE_PUBLIC_KEY  # optional (Flutterwave demo mode if absent)
 VITE_ENABLE_2FA                                   # optional, default false
 VITE_GA_ID, VITE_CLARITY_ID                       # optional analytics
 ```
@@ -293,6 +294,7 @@ VITE_GA_ID, VITE_CLARITY_ID                       # optional analytics
 Server (Supabase Edge Function secrets — never in `.env`):
 
 ```
+PAYSTACK_SECRET_KEY          # required for Paystack initialization and verification
 RESEND_API_KEY, EMAIL_FROM
 ```
 

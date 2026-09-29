@@ -70,6 +70,7 @@ serve(async (req) => {
   const gateway = String(payload?.gateway ?? "");
   const reference = String(payload?.reference ?? "").trim();
   const bankMeta = payload?.bankMeta || {};
+  const promoCode = String(payload?.promoCode ?? "").trim().toUpperCase();
   if (!courseId) return json({ ok: false, reason: "Missing courseId" }, 400, origin);
   if (!["Paystack", "Flutterwave", "Bank Transfer"].includes(gateway))
     return json({ ok: false, reason: "Unsupported gateway" }, 400, origin);
@@ -84,16 +85,41 @@ serve(async (req) => {
   const { data: course, error: courseErr } = await admin
     .from("courses").select("id, title, price").eq("id", courseId).maybeSingle();
   if (courseErr || !course) return json({ ok: false, reason: "Course not found" }, 404, origin);
-  const price = Number(course.price) || 0;
+  const basePrice = Number(course.price) || 0;
 
-  // ── 3. Idempotency: don't double-enrol ──
+  // Idempotency first: a webhook may already have fulfilled this payment.
   const { data: existing } = await admin
     .from("enrollments").select("*").eq("course_id", courseId).eq("learner_email", learnerEmail).maybeSingle();
   if (existing) return json({ ok: true, enrollment: existing, alreadyEnrolled: true }, 200, origin);
 
-  // ── 4. Decide payment status (verify with the gateway when it's a paid, card charge) ──
+  // Validate promo code server-side if provided
+  let expectedPrice = basePrice;
+  let promoUses: number | null = null;
+  if (promoCode && basePrice > 0) {
+    const { data: promo } = await admin
+      .from("promo_codes")
+      .select("*")
+      .eq("code", promoCode)
+      .maybeSingle();
+
+    if (promo && promo.active) {
+      const notExpired = !promo.expires_at || new Date(promo.expires_at) >= new Date();
+      const withinUsage = !promo.max_uses || (promo.uses || 0) < promo.max_uses;
+      if (notExpired && withinUsage && typeof promo.discount_percent === "number"
+        && promo.discount_percent >= 0 && promo.discount_percent <= 100) {
+        expectedPrice = Math.max(0, Math.round(basePrice * (1 - promo.discount_percent / 100)));
+        promoUses = promo.uses || 0;
+      } else {
+        return json({ ok: false, reason: "Promo code is invalid or expired" }, 409, origin);
+      }
+    } else {
+      return json({ ok: false, reason: "Promo code is invalid or expired" }, 409, origin);
+    }
+  }
+
+  // ── 3. Decide payment status (verify with the gateway when it's a paid, card charge) ──
   let paymentOk = false;
-  let chargedAmount = price;
+  let chargedAmount = expectedPrice;
   let enrollmentStatus: "Successful" | "Pending" = "Successful";
   let txnStatus: "Successful" | "Pending" = "Successful";
 
@@ -102,28 +128,42 @@ serve(async (req) => {
     enrollmentStatus = "Pending";
     txnStatus = "Pending";
     paymentOk = true;
-  } else if (price <= 0) {
-    // Free course.
+  } else if (expectedPrice <= 0) {
+    // Free course or 100% discount.
     chargedAmount = 0;
     paymentOk = true;
   } else {
     if (!reference) return json({ ok: false, reason: "Missing payment reference" }, 400, origin);
-    const v = await verifyPayment(gateway, reference, price);
+    if (gateway === "Paystack" && !reference.startsWith("LANI-PSTK-")) {
+      return json({ ok: false, reason: "Invalid Paystack payment reference" }, 400, origin);
+    }
+    const v = await verifyPayment(gateway, reference, {
+      amount: expectedPrice,
+      currency: "NGN",
+      customerEmail: learnerEmail,
+      courseId: gateway === "Paystack" ? courseId : undefined,
+      integration: gateway === "Paystack" ? "lani-academy-v1" : undefined,
+    });
     if (v.configured) {
       // Real verification available — enforce it.
       if (!v.verified) return json({ ok: false, reason: v.reason || "Payment not verified" }, 402, origin);
-      chargedAmount = typeof v.amount === "number" ? v.amount : price;
+      chargedAmount = typeof v.amount === "number" ? v.amount : expectedPrice;
       paymentOk = true;
     } else {
-      // No gateway secret configured (demo/test env) — allow but flag.
-      paymentOk = true;
+      return json({ ok: false, reason: `${gateway} is not configured on the payment server` }, 503, origin);
     }
   }
   if (!paymentOk) return json({ ok: false, reason: "Payment could not be processed" }, 402, origin);
 
-  // ── 5. Create transaction + enrolment (service role bypasses RLS) ──
+  // ── 4. Create transaction + enrolment (service role bypasses RLS) ──
   const receipt = (reference && !reference.startsWith("DEMO-")) ? reference
     : `LANI-${gateway.slice(0, 2).toUpperCase()}-${rand(8)}`;
+
+  const { data: usedReference } = await admin.from("transactions")
+    .select("id")
+    .eq("receipt_number", receipt)
+    .maybeSingle();
+  if (usedReference) return json({ ok: false, reason: "Payment reference has already been used" }, 409, origin);
 
   const { data: txn, error: txnErr } = await admin.from("transactions").insert({
     course_id: courseId,
@@ -147,9 +187,17 @@ serve(async (req) => {
     completed_lessons: [],
     payment_status: enrollmentStatus,
   }).select().maybeSingle();
-  if (enrErr) return json({ ok: false, reason: `Could not create enrolment: ${enrErr.message}` }, 500, origin);
+  if (enrErr) {
+    if (txn?.id) await admin.from("transactions").delete().eq("id", txn.id);
+    return json({ ok: false, reason: `Could not create enrolment: ${enrErr.message}` }, 500, origin);
+  }
 
-  // ── 6. In-app notification (service role, so it isn't blocked by RLS) ──
+  // Count a promo only after a verified payment and enrolment were recorded.
+  if (promoCode && promoUses !== null) {
+    await admin.from("promo_codes").update({ uses: promoUses + 1 }).eq("code", promoCode).eq("uses", promoUses);
+  }
+
+  // ── 5. In-app notification (service role, so it isn't blocked by RLS) ──
   await admin.from("notifications").insert({
     type: "payment",
     title: gateway === "Bank Transfer" ? "Enrolment received" : "Enrolment confirmed",

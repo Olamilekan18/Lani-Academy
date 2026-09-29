@@ -40,19 +40,19 @@ npm run dev                 # http://localhost:5173
 
 ## Environment variables
 
-Copy `.env.example` to `.env` and fill in:
+Copy `.env.example` to `.env` for browser variables. Server variables are set with `supabase secrets set`:
 
 | Variable | Required | Notes |
 |---|---|---|
 | `VITE_SUPABASE_URL` | ✅ | Supabase → Project Settings → API |
 | `VITE_SUPABASE_ANON_KEY` | ✅ | anon public key (safe on client) |
-| `VITE_PAYSTACK_PUBLIC_KEY` | ➖ | omit to run checkout in demo mode |
+| `PAYSTACK_SECRET_KEY` | ✅ for Paystack | Supabase Edge Function secret; never expose in Vite |
 | `VITE_FLUTTERWAVE_PUBLIC_KEY` | ➖ | omit to run checkout in demo mode |
 | `VITE_ENABLE_2FA` | ➖ | `true` enables email 2FA (needs Resend live) |
 | `VITE_GA_ID` | ➖ | Google Analytics 4 measurement id |
 | `VITE_CLARITY_ID` | ➖ | Microsoft Clarity id |
 
-Email secrets are **not** in `.env` — they're set on Supabase (see Edge Functions).
+Paystack and email secrets are **not** browser variables — set them on Supabase (see Edge Functions).
 
 ---
 
@@ -165,7 +165,7 @@ The navbar is role‑aware: signed‑in users see their dashboard as the first n
 
 - **"Supabase Connection Error" screen** — check `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, and that the schema has been run. You can also click **Proceed Offline** to preview with demo data.
 - **`db push` fails with "policy already exists"** — you likely ran `supabase_schema.sql` first; the migrations are idempotent, re‑run `db push` (or use `supabase migration repair`).
-- **Payments open a demo popup** — no payment public key is set; add one to `.env`.
+- **Paystack checkout is server-initialized** — set `PAYSTACK_SECRET_KEY` in Supabase (`sk_test_…` first, then `sk_live_…`). The browser receives only a one-time access code.
 - **No emails arriving** — deploy the `send-email` function and set `RESEND_API_KEY` / `EMAIL_FROM`.
 - **Can't create an admin from the app** — by design; admins are provisioned via SQL or by an existing admin.
 

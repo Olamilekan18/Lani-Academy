@@ -451,16 +451,50 @@ export interface BankTransferMeta {
   receiptUrl?: string;
 }
 
+export interface PaystackInitialization {
+  ok: boolean;
+  accessCode?: string;
+  reference?: string;
+  amount?: number;
+  free?: boolean;
+  reason?: string;
+}
+
+export async function dbInitializePaystackPayment(
+  courseId: string,
+  promoCode?: string
+): Promise<PaystackInitialization> {
+  if (!supabase) return { ok: false, reason: "Supabase not configured" };
+  try {
+    const { data, error } = await supabase.functions.invoke("initialize-payment", {
+      body: { courseId, promoCode },
+    });
+    if (error) {
+      let reason = error.message;
+      try {
+        const ctx = (error as { context?: { json?: () => Promise<{ reason?: string }> } }).context;
+        const body = ctx?.json ? await ctx.json() : undefined;
+        if (body?.reason) reason = body.reason;
+      } catch { /* ignore malformed function error bodies */ }
+      return { ok: false, reason };
+    }
+    return data as PaystackInitialization;
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 export async function dbEnroll(
   courseId: string,
   gateway: "Paystack" | "Flutterwave" | "Bank Transfer",
   reference?: string,
-  bankMeta?: BankTransferMeta
+  bankMeta?: BankTransferMeta,
+  promoCode?: string
 ): Promise<EnrollResult> {
   if (!supabase) return { ok: false, reason: "Supabase not configured" };
   try {
     const { data, error } = await supabase.functions.invoke("enroll", {
-      body: { courseId, gateway, reference, bankMeta },
+      body: { courseId, gateway, reference, bankMeta, promoCode },
     });
     if (error) {
       // Try to surface the function's JSON error message when present.
@@ -1102,4 +1136,3 @@ export async function dbLogAudit(entry: {
     /* auditing must never block the app */
   }
 }
-

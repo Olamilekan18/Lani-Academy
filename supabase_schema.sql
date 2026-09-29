@@ -134,6 +134,9 @@ CREATE TABLE IF NOT EXISTS public.enrollments (
     sponsor_organisation TEXT
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS enrollments_course_learner_unique
+  ON public.enrollments (course_id, lower(learner_email));
+
 -- Enable RLS for Enrollments
 ALTER TABLE public.enrollments ENABLE ROW LEVEL SECURITY;
 

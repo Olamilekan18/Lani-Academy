@@ -13,7 +13,7 @@ import {
 import type { Course } from "../lib/types";
 import type { BankTransferMeta } from "../lib/db";
 import { formatMoney } from "../lib/utils";
-import { dbValidatePromo, dbUploadFile } from "../lib/db";
+import { dbInitializePaystackPayment, dbValidatePromo, dbUploadFile } from "../lib/db";
 
 type Gateway = "Paystack" | "Flutterwave" | "Bank Transfer";
 
@@ -26,17 +26,26 @@ interface CheckoutModalProps {
     gateway: Gateway,
     reference?: string,
     amount?: number,
-    bankMeta?: BankTransferMeta
+    bankMeta?: BankTransferMeta,
+    promoCode?: string
   ) => Promise<void>;
 }
 
 // Public keys are safe to expose on the client for both gateways.
-const PAYSTACK_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string | undefined;
 const FLUTTERWAVE_KEY = import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY as string | undefined;
 
 declare global {
   interface Window {
-    PaystackPop?: any;
+    PaystackPop?: new () => {
+      resumeTransaction: (
+        accessCode: string,
+        callbacks: {
+          onSuccess: (response: { reference: string }) => void;
+          onCancel: () => void;
+          onError: (error: { message?: string }) => void;
+        }
+      ) => Promise<unknown> | unknown;
+    };
     FlutterwaveCheckout?: any;
   }
 }
@@ -98,22 +107,32 @@ export default function CheckoutModal({
     }
   };
 
-  const liveKey = gateway === "Paystack" ? PAYSTACK_KEY : gateway === "Flutterwave" ? FLUTTERWAVE_KEY : undefined;
+  const liveKey = gateway === "Paystack" ? true : gateway === "Flutterwave" ? FLUTTERWAVE_KEY : undefined;
   const isCardGateway = gateway === "Paystack" || gateway === "Flutterwave";
   const demoMode = isCardGateway && !liveKey;
 
   // Preload gateway scripts as soon as the modal opens.
   useEffect(() => {
-    if (PAYSTACK_KEY) loadScript("https://js.paystack.co/v1/inline.js");
+    loadScript("https://js.paystack.co/v2/inline.js");
     if (FLUTTERWAVE_KEY) loadScript("https://checkout.flutterwave.com/v3.js");
   }, []);
 
   const handleSubmitInfo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!learnerName.trim() || !learnerEmail.trim()) {
-      setError("Please fill in your name and email.");
+    const cleanName = learnerName.trim();
+    const cleanEmail = learnerEmail.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!cleanName) {
+      setError("Please enter your full name.");
       return;
     }
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setError("Please enter a valid email address (e.g. you@example.com).");
+      return;
+    }
+    setLearnerName(cleanName);
+    setLearnerEmail(cleanEmail);
     setError("");
     setStep("pay");
   };
@@ -124,7 +143,7 @@ export default function CheckoutModal({
       // The enrolment is granted server-side only after the gateway confirms
       // the charge (audit remediation C2). onPaymentComplete throws with a
       // reason if verification/enrolment fails.
-      await onPaymentComplete(gw, ref, finalAmount, bankMeta);
+      await onPaymentComplete(gw, ref, finalAmount, bankMeta, promo.trim() || undefined);
       setReference(ref);
       setStep("success");
     } catch (e) {
@@ -138,28 +157,47 @@ export default function CheckoutModal({
   // ── Real Paystack inline checkout ────────────────────────────
   const payWithPaystack = async () => {
     setError("");
-    const ok = await loadScript("https://js.paystack.co/v1/inline.js");
+    const cleanEmail = learnerEmail.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setError("Please provide a valid email address (e.g. name@example.com).");
+      setStep("info");
+      return;
+    }
+    setLoading(true);
+    const initialized = await dbInitializePaystackPayment(course.id, promo.trim() || undefined);
+    if (!initialized.ok || !initialized.reference) {
+      setLoading(false);
+      setError(initialized.reason || "Could not initialize Paystack payment.");
+      return;
+    }
+    if (initialized.free) {
+      setLoading(false);
+      return void finalise("Paystack", initialized.reference);
+    }
+    if (!initialized.accessCode) {
+      setLoading(false);
+      setError("Paystack did not return a checkout access code.");
+      return;
+    }
+
+    const ok = await loadScript("https://js.paystack.co/v2/inline.js");
     if (!ok || !window.PaystackPop) {
+      setLoading(false);
       setError("Could not reach Paystack. Check your connection and try again.");
       return;
     }
-    const handler = window.PaystackPop.setup({
-      key: PAYSTACK_KEY,
-      email: learnerEmail,
-      amount: Math.round(finalAmount * 100), // kobo
-      currency: "NGN",
-      metadata: {
-        custom_fields: [
-          { display_name: "Learner", variable_name: "learner_name", value: learnerName },
-          { display_name: "Course", variable_name: "course", value: `${course.code} — ${course.title}` },
-        ],
-      },
-      callback: (response: { reference: string }) => {
-        void finalise("Paystack", response.reference);
-      },
-      onClose: () => setError("Payment window closed before completion."),
-    });
-    handler.openIframe();
+    setLoading(false);
+    const popup = new window.PaystackPop();
+    try {
+      await popup.resumeTransaction(initialized.accessCode, {
+        onSuccess: (response) => void finalise("Paystack", response.reference || initialized.reference!),
+        onCancel: () => setError("Payment window closed before completion."),
+        onError: (paystackError) => setError(paystackError.message || "Paystack could not load this payment."),
+      });
+    } catch (paystackError) {
+      setError(paystackError instanceof Error ? paystackError.message : "Paystack could not load this payment.");
+    }
   };
 
   // ── Real Flutterwave inline checkout ─────────────────────────
@@ -232,6 +270,9 @@ export default function CheckoutModal({
     if (gateway === "Bank Transfer") {
       // Handled by the form submit
       return;
+    }
+    if (finalAmount <= 0) {
+      return void finalise(gateway, "FREE-" + Date.now());
     }
     if (demoMode) return payDemo();
     if (gateway === "Paystack") return void payWithPaystack();
@@ -453,7 +494,7 @@ export default function CheckoutModal({
 
               {demoMode && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-left text-xs font-semibold text-amber-800">
-                  To enable live card payments, set <code className="font-mono">VITE_{gateway === "Paystack" ? "PAYSTACK" : "FLUTTERWAVE"}_PUBLIC_KEY</code> in your <code className="font-mono">.env</code>.
+                  To enable live card payments, set <code className="font-mono">VITE_FLUTTERWAVE_PUBLIC_KEY</code> in your <code className="font-mono">.env</code>.
                 </div>
               )}
 

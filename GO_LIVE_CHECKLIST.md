@@ -1,6 +1,6 @@
 # LANI Academy — Go-Live Checklist
 
-_Last updated: 9 August 2026_
+_Last updated: 29 September 2026_
 
 This is the ordered list of steps to take the app from its current state to production. Code is in good shape; most remaining work is deployment and configuration in Supabase and your host. Check items off top to bottom.
 
@@ -19,7 +19,8 @@ This is the ordered list of steps to take the app from its current state to prod
 
 ## 2. Edge Functions — deploy
 
-- [ ] `supabase functions deploy send-email verify-payment auth-otp enroll issue-certificate send-class-reminders`
+- [ ] `supabase functions deploy send-email initialize-payment verify-payment auth-otp enroll issue-certificate send-class-reminders`
+- [ ] `supabase functions deploy paystack-webhook` (`supabase/config.toml` disables JWT only for this HMAC-verified webhook)
 - [ ] Confirm each function appears as deployed in the Supabase dashboard.
 
 ## 3. Secrets (server-side, set in Supabase)
@@ -36,7 +37,7 @@ This is the ordered list of steps to take the app from its current state to prod
 ## 4. Client environment (public keys only — in host env / `.env`)
 
 - [ ] `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
-- [ ] `VITE_PAYSTACK_PUBLIC_KEY`, `VITE_FLUTTERWAVE_PUBLIC_KEY`
+- [ ] `VITE_FLUTTERWAVE_PUBLIC_KEY` (Paystack is initialized server-side and does not need a browser key)
 - [ ] `VITE_ENABLE_2FA=true` — **only after** `RESEND_API_KEY` is live, or codes can't be delivered.
 
 ## 5. Supabase Auth settings
@@ -61,7 +62,7 @@ This is the ordered list of steps to take the app from its current state to prod
 
 ## Behaviour notes (expected until configured)
 
-- **Payments run in demo mode** until the gateway secret keys are set: checkout is simulated (nothing is charged) but enrolment is still granted. Verification becomes strictly enforced the moment the secrets exist.
+- **Paystack fails closed** until `PAYSTACK_SECRET_KEY` is set in Supabase. Paid enrolment is never granted from a browser callback alone. Flutterwave retains its public-key demo fallback until its server integration is configured.
 - **No emails send** until the `send-email` function is deployed and `RESEND_API_KEY` / `EMAIL_FROM` are set.
 - **Admins can't be created from the app** — by design; provision via the SQL above or by an existing admin.
 

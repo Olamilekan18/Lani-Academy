@@ -497,7 +497,8 @@ export default function App() {
     gateway: "Paystack" | "Flutterwave" | "Bank Transfer",
     reference?: string,
     amount?: number,
-    bankMeta?: BankTransferMeta
+    bankMeta?: BankTransferMeta,
+    promoCode?: string
   ) => {
     if (!selectedCourse) return;
 
@@ -507,7 +508,7 @@ export default function App() {
     // Enrolment + transaction are created SERVER-SIDE by the enroll Edge
     // Function only after the payment is verified against the gateway. If it
     // fails, throw so the checkout modal surfaces the reason.
-    const res = await dbEnroll(selectedCourse.id, gateway, reference, bankMeta);
+    const res = await dbEnroll(selectedCourse.id, gateway, reference, bankMeta, promoCode);
     if (!res.ok) {
       throw new Error(res.reason || "We couldn't verify your payment, so you haven't been enrolled.");
     }

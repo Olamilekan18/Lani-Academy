@@ -1,14 +1,19 @@
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import CheckoutModal from "../components/CheckoutModal";
 import type { Course } from "../lib/types";
 
-// Mock dbValidatePromo
+const paymentMocks = vi.hoisted(() => ({
+  initialize: vi.fn(),
+}));
+
+// Mock payment database calls
 vi.mock("../lib/db", async () => {
   const actual = await vi.importActual("../lib/db");
   return {
     ...actual,
+    dbInitializePaystackPayment: paymentMocks.initialize,
     dbValidatePromo: vi.fn().mockImplementation((code: string) => {
       if (code === "LANI20") {
         return Promise.resolve({ id: "p1", code: "LANI20", discountPercent: 20, active: true });
@@ -56,6 +61,11 @@ describe("CheckoutModal Component (src/components/CheckoutModal.tsx)", () => {
     onPaymentComplete: vi.fn().mockResolvedValue(undefined),
   };
 
+  afterEach(() => {
+    paymentMocks.initialize.mockReset();
+    delete window.PaystackPop;
+  });
+
   it("renders course details and total price initially", () => {
     render(<CheckoutModal {...defaultProps} />);
 
@@ -97,5 +107,34 @@ describe("CheckoutModal Component (src/components/CheckoutModal.tsx)", () => {
     // Verify input fields for transfer proof
     expect(screen.getByPlaceholderText("Name on the sending account")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("e.g. GTBank, First Bank")).toBeInTheDocument();
+  });
+
+  it("initializes Paystack on the server and resumes the v2 popup", async () => {
+    const resumeTransaction = vi.fn().mockResolvedValue(undefined);
+    window.PaystackPop = class {
+      resumeTransaction = resumeTransaction;
+    };
+    paymentMocks.initialize.mockResolvedValue({
+      ok: true,
+      accessCode: "access_test_123",
+      reference: "LANI-PSTK-123-abc",
+      amount: 250000,
+    });
+
+    render(<CheckoutModal {...defaultProps} />);
+    fireEvent.click(screen.getByText("Continue"));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₦250,000" }));
+
+    await waitFor(() => {
+      expect(paymentMocks.initialize).toHaveBeenCalledWith("course-1", undefined);
+      expect(resumeTransaction).toHaveBeenCalledWith(
+        "access_test_123",
+        expect.objectContaining({
+          onSuccess: expect.any(Function),
+          onCancel: expect.any(Function),
+          onError: expect.any(Function),
+        })
+      );
+    });
   });
 });
