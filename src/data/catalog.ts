@@ -81,6 +81,75 @@ export const deliveryModes: DeliveryMode[] = [
 
 const baseCourses: Course[] = [
   {
+    id: "workplace-digital-productivity",
+    title: "Workplace Digital Productivity & Communication Essentials",
+    code: "LANI-WPE-101",
+    category: "Professional Development",
+    thematicArea: "ICT and Digital Transformation",
+    type: "Open Programme",
+    level: "Foundation",
+    deliveryModes: ["Self-paced", "Virtual"],
+    duration: "1 week",
+    price: 1000,
+    certification: "LANI Academy Certificate of Completion",
+    status: "Open",
+    startDate: "2026-10-01",
+    endDate: "2026-10-31",
+    image:
+      "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1200&q=80",
+    shortDescription:
+      "Master high-impact digital productivity workflows, effective business writing, and modern workplace collaboration tools.",
+    fullDescription:
+      "An interactive, practical foundation course designed to upgrade everyday workplace performance. Learners will discover actionable frameworks to manage digital workflows, craft professional communications, organize tasks, and leverage modern digital tools to maximize daily output.",
+    outcomes: [
+      "Navigate and apply modern digital workplace tools and cloud productivity suites",
+      "Write clear, professional business emails, project summaries, and client memos",
+      "Organize personal and team task queues using structured productivity frameworks",
+      "Apply best practices in professional workplace etiquette and digital communication",
+    ],
+    audience: [
+      "Early-career professionals and career switchers",
+      "Administrative, operations, and support staff",
+      "Small business owners and freelancers",
+      "Any professional wanting to streamline their daily digital workflow",
+    ],
+    modules: [
+      {
+        title: "Digital Workspace & Workflow Foundations",
+        lessons: [
+          "Modern Productivity Tools Overview",
+          "Streamlining Daily Tasks and To-Dos",
+          "Managing Information and Digital Clutter",
+        ],
+      },
+      {
+        title: "Professional Workplace Communication",
+        lessons: [
+          "High-Impact Business Email Writing",
+          "Effective Virtual Meetings & Etiquette",
+          "Clear Status Reporting & Documentation",
+        ],
+      },
+      {
+        title: "Execution & Practical Assessment",
+        lessons: [
+          "Building Your Personal Productivity System",
+          "Course Practical Capstone Review",
+        ],
+      },
+    ],
+    facilitator: "LANI Digital Faculty",
+    materials: [
+      "Course Handbook & Action Workbook",
+      "Business Writing Cheat Sheets",
+      "Productivity Audit Checklist",
+    ],
+    assessment: "Online practical assessment quiz and personal workflow audit plan",
+    seats: 100,
+    enrolled: 18,
+    featured: true,
+  },
+  {
     id: "digital-transformation-officer",
     title: "Digital Transformation Officer Pathway",
     code: "LANI-DTO-401",

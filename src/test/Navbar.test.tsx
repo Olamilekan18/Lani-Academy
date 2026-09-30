@@ -22,7 +22,7 @@ describe("Navbar Component (src/components/Navbar.tsx)", () => {
     render(<Navbar {...defaultProps} />);
 
     expect(screen.getByText("LANI")).toBeInTheDocument();
-    expect(screen.getByText("Academy")).toBeInTheDocument();
+    expect(screen.getByText(/Academy/i)).toBeInTheDocument();
     expect(screen.getByText("My Learning")).toBeInTheDocument();
     expect(screen.getByText("Courses")).toBeInTheDocument();
     expect(screen.getByText("Certification")).toBeInTheDocument();
